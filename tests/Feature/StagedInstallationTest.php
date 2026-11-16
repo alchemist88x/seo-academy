@@ -260,4 +260,23 @@ class StagedInstallationTest extends TestCase
         $this->get(route('install.step.migrations'))->assertRedirect(route('login'));
         $this->get(route('install.step.finalization'))->assertRedirect(route('login'));
     }
+
+    public function test_database_store_validates_driver_and_mysql_fields(): void
+    {
+        // 1. Missing driver produces validation error
+        $missingDriver = $this->post(route('install.step.database.store'), []);
+        $missingDriver->assertSessionHasErrors(['driver']);
+
+        // 2. Invalid driver produces validation error
+        $invalidDriver = $this->post(route('install.step.database.store'), [
+            'driver' => 'postgres',
+        ]);
+        $invalidDriver->assertSessionHasErrors(['driver']);
+
+        // 3. MySQL driver without host/database/username fails validation
+        $incompleteMysql = $this->post(route('install.step.database.store'), [
+            'driver' => 'mysql',
+        ]);
+        $incompleteMysql->assertSessionHasErrors(['host', 'database', 'username']);
+    }
 }

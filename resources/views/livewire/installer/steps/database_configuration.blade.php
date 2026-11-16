@@ -6,6 +6,38 @@
         </p>
     </div>
 
+    {{-- Driver Validation Banner --}}
+    @error('driver')
+        <div class="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2">
+            <svg class="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span>{{ $message }}</span>
+        </div>
+    @enderror
+
+    {{-- Seamless Engine Switcher Bar --}}
+    <div class="flex items-center justify-between p-3 rounded-xl bg-surface-elevated/30 border border-border-default">
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-text-muted">Target Engine:</span>
+            <span class="text-xs font-bold text-text-primary uppercase font-mono">{{ $driver }}</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+            <button
+                type="button"
+                wire:click="selectDriver('sqlite')"
+                class="px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer {{ $driver === 'sqlite' ? 'bg-primary-600 text-white shadow-xs' : 'bg-surface-elevated text-text-muted hover:text-text-primary border border-border-default' }}"
+            >
+                SQLite 3
+            </button>
+            <button
+                type="button"
+                wire:click="selectDriver('mysql')"
+                class="px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer {{ $driver === 'mysql' ? 'bg-primary-600 text-white shadow-xs' : 'bg-surface-elevated text-text-muted hover:text-text-primary border border-border-default' }}"
+            >
+                MySQL 8.4+
+            </button>
+        </div>
+    </div>
+
     @if ($driver === 'sqlite')
         {{-- SQLite Configuration Form --}}
         <div class="space-y-4">

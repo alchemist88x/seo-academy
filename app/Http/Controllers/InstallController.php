@@ -264,6 +264,12 @@ class InstallController extends Controller
             'username' => ['required_if:driver,mysql', 'nullable', 'string', 'max:255'],
             'password' => ['nullable', 'string', 'max:1024'],
             'confirm_switch' => ['nullable', 'boolean'],
+        ], [
+            'driver.required' => 'The driver field is required. Please select SQLite or MySQL.',
+            'driver.in' => 'The selected database driver must be either SQLite or MySQL.',
+            'host.required_if' => 'The database host is required when MySQL is selected.',
+            'database.required_if' => 'The database name is required when MySQL is selected.',
+            'username.required_if' => 'The database username is required when MySQL is selected.',
         ]);
 
         $confirmSwitch = (bool) ($validated['confirm_switch'] ?? false);

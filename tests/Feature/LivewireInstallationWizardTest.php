@@ -217,4 +217,68 @@ class LivewireInstallationWizardTest extends TestCase
             ->assertHasErrors(['mysqlHost', 'mysqlDatabase', 'mysqlUsername'])
             ->assertSet('step', 5);
     }
+
+    public function test_database_engine_selection_and_persistence(): void
+    {
+        $component = Livewire::test(InstallationWizard::class)
+            ->call('startInstallation')
+            ->call('proceedFromRequirements')
+            ->call('proceedFromDependencies')
+            ->assertSet('step', 4)
+            ->assertSet('driver', 'sqlite')
+            ->assertSee('SQLite 3')
+            ->assertSee('MySQL 8.4+ InnoDB');
+
+        // Select MySQL
+        $component->call('selectDriver', 'mysql')
+            ->assertSet('driver', 'mysql')
+            ->assertHasNoErrors('driver');
+
+        // Verify state persistence
+        $stateService = app(InstallationStateService::class);
+        $this->assertSame('mysql', $stateService->getState()['driver']);
+
+        // Switch back to SQLite
+        $component->call('selectDriver', 'sqlite')
+            ->assertSet('driver', 'sqlite')
+            ->assertHasNoErrors('driver');
+        $this->assertSame('sqlite', $stateService->getState()['driver']);
+    }
+
+    public function test_invalid_driver_selection_rejected_with_validation_error(): void
+    {
+        Livewire::test(InstallationWizard::class)
+            ->call('startInstallation')
+            ->call('proceedFromRequirements')
+            ->call('proceedFromDependencies')
+            ->assertSet('step', 4)
+            ->call('selectDriver', 'oracle')
+            ->assertHasErrors(['driver'])
+            ->assertSet('driver', 'sqlite'); // remains unchanged
+    }
+
+    public function test_step_5_immediate_engine_toggle_without_page_reload(): void
+    {
+        $component = Livewire::test(InstallationWizard::class)
+            ->call('startInstallation')
+            ->call('proceedFromRequirements')
+            ->call('proceedFromDependencies')
+            ->call('selectDriver', 'sqlite')
+            ->call('proceedFromDatabaseSelection')
+            ->assertSet('step', 5)
+            ->assertSee('SQLite Database Configuration')
+            ->assertDontSee('Database Server Host');
+
+        // Toggle to MySQL on Step 5
+        $component->call('selectDriver', 'mysql')
+            ->assertSet('step', 5)
+            ->assertSee('MySQL Connection Credentials')
+            ->assertSee('Database Server Host');
+
+        // Toggle back to SQLite on Step 5
+        $component->call('selectDriver', 'sqlite')
+            ->assertSet('step', 5)
+            ->assertSee('SQLite Database Configuration')
+            ->assertDontSee('Database Server Host');
+    }
 }

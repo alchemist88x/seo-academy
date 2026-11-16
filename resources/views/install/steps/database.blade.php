@@ -71,49 +71,94 @@
             </p>
         </div>
 
-        {{-- Driver Switch Tabs --}}
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button
-                type="button"
-                @click="selectDriver('sqlite')"
-                class="p-4 rounded-xl border text-left transition-all"
-                :class="driver === 'sqlite' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover'"
-            >
-                <div class="flex items-center justify-between mb-2">
-                    <span class="font-bold text-sm text-text-primary flex items-center gap-2">
-                        <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
-                        SQLite (Recommended)
-                    </span>
-                    <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-surface-elevated text-text-muted">Self-Contained</span>
-                </div>
-                <p class="text-xs text-text-secondary">
-                    Zero configuration required. Ideal for shared hosting, VPS, single academies, and easy full-system backups. Stored securely under <code>storage/app/private/</code>.
-                </p>
-            </button>
-
-            <button
-                type="button"
-                @click="selectDriver('mysql')"
-                class="p-4 rounded-xl border text-left transition-all"
-                :class="driver === 'mysql' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover'"
-            >
-                <div class="flex items-center justify-between mb-2">
-                    <span class="font-bold text-sm text-text-primary flex items-center gap-2">
-                        <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                        MySQL 8.4+ InnoDB
-                    </span>
-                    <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-surface-elevated text-text-muted">Dedicated DB</span>
-                </div>
-                <p class="text-xs text-text-secondary">
-                    Recommended for academies anticipating high concurrent student loads, large cohorts, and managed remote database servers.
-                </p>
-            </button>
-        </div>
-
-        {{-- Form Container --}}
-        <form method="POST" action="{{ route('install.step.database.store') }}" class="space-y-4">
+        {{-- Form Container wrapping both engine selection and configuration --}}
+        <form method="POST" action="{{ route('install.step.database.store') }}" class="space-y-6">
             @csrf
-            <input type="hidden" name="driver" :value="driver">
+
+            {{-- Error Banner for Driver --}}
+            @error('driver')
+                <div class="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2">
+                    <svg class="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>{{ $message }}</span>
+                </div>
+            @enderror
+
+            {{-- Driver Switch Cards (Semantic Radio Group) --}}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" role="radiogroup" aria-label="Database Engine Selection">
+                {{-- SQLite Card --}}
+                <label
+                    for="staged-engine-sqlite"
+                    @click="selectDriver('sqlite')"
+                    class="p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between"
+                    :class="driver === 'sqlite' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover'"
+                >
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-bold text-sm text-text-primary flex items-center gap-2">
+                                <input
+                                    id="staged-engine-sqlite"
+                                    type="radio"
+                                    name="driver"
+                                    value="sqlite"
+                                    x-model="driver"
+                                    @change="selectDriver('sqlite')"
+                                    {{ old('driver', $currentDriver ?? 'sqlite') === 'sqlite' ? 'checked' : '' }}
+                                    class="w-4 h-4 text-primary-600 focus:ring-primary-500 border-border-default cursor-pointer"
+                                />
+                                <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+                                SQLite (Recommended)
+                            </span>
+                            <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-surface-elevated text-text-muted">Self-Contained</span>
+                        </div>
+                        <p class="text-xs text-text-secondary pl-6">
+                            Zero configuration required. Ideal for shared hosting, VPS, single academies, and easy full-system backups. Stored securely under <code>storage/app/private/</code>.
+                        </p>
+                    </div>
+
+                    <div class="mt-3 pt-2 border-t border-border-default/60 flex items-center justify-between text-xs">
+                        <span class="text-[11px] text-text-muted">Single-file database</span>
+                        <span class="text-primary-600 dark:text-primary-400 font-bold text-xs" x-show="driver === 'sqlite'">Selected</span>
+                        <span class="text-text-muted text-xs" x-show="driver !== 'sqlite'" style="display: none;">Click to select</span>
+                    </div>
+                </label>
+
+                {{-- MySQL Card --}}
+                <label
+                    for="staged-engine-mysql"
+                    @click="selectDriver('mysql')"
+                    class="p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between"
+                    :class="driver === 'mysql' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover'"
+                >
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-bold text-sm text-text-primary flex items-center gap-2">
+                                <input
+                                    id="staged-engine-mysql"
+                                    type="radio"
+                                    name="driver"
+                                    value="mysql"
+                                    x-model="driver"
+                                    @change="selectDriver('mysql')"
+                                    {{ old('driver', $currentDriver ?? 'sqlite') === 'mysql' ? 'checked' : '' }}
+                                    class="w-4 h-4 text-primary-600 focus:ring-primary-500 border-border-default cursor-pointer"
+                                />
+                                <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                                MySQL 8.4+ InnoDB
+                            </span>
+                            <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-surface-elevated text-text-muted">Dedicated DB</span>
+                        </div>
+                        <p class="text-xs text-text-secondary pl-6">
+                            Recommended for academies anticipating high concurrent student loads, large cohorts, and managed remote database servers.
+                        </p>
+                    </div>
+
+                    <div class="mt-3 pt-2 border-t border-border-default/60 flex items-center justify-between text-xs">
+                        <span class="text-[11px] text-text-muted">High concurrency engine</span>
+                        <span class="text-primary-600 dark:text-primary-400 font-bold text-xs" x-show="driver === 'mysql'" style="display: none;">Selected</span>
+                        <span class="text-text-muted text-xs" x-show="driver !== 'mysql'">Click to select</span>
+                    </div>
+                </label>
+            </div>
 
             {{-- SQLite Details --}}
             <div x-show="driver === 'sqlite'" class="p-4 rounded-lg bg-surface-elevated/40 border border-border-default space-y-3">

@@ -116,7 +116,8 @@ class InstallationWizard extends Component
         // 4. Load persisted installation state
         $state = $stateService->getState();
         $this->completedSteps = $state['completed_steps'] ?? [];
-        $this->driver = $state['driver'] ?? 'sqlite';
+        $savedDriver = $state['driver'] ?? null;
+        $this->driver = in_array($savedDriver, ['sqlite', 'mysql'], true) ? $savedDriver : 'sqlite';
 
         if (! empty($state['db_config'])) {
             $cfg = $state['db_config'];
@@ -253,17 +254,39 @@ class InstallationWizard extends Component
     }
 
     /**
+     * Livewire updated hook for driver property.
+     */
+    public function updatedDriver(mixed $value): void
+    {
+        $this->selectDriver(is_string($value) ? $value : '');
+    }
+
+    /**
      * Step 4: Select Database Engine (SQLite or MySQL).
      */
     public function selectDriver(string $newDriver): void
     {
         if (! in_array($newDriver, ['sqlite', 'mysql'], true)) {
+            $this->addError('driver', 'The selected database driver is invalid. Please select SQLite or MySQL.');
+
             return;
         }
 
+        $this->resetErrorBag('driver');
+        $this->generalError = null;
         $this->driver = $newDriver;
         $this->testResult = null;
         $this->connectionVerified = false;
+
+        // Immediately persist user selection into state
+        try {
+            $stateService = app(InstallationStateService::class);
+            $stateService->saveState(array_merge($stateService->getState(), [
+                'driver' => $this->driver,
+            ]));
+        } catch (Throwable) {
+            // Non-blocking in volatile testing contexts
+        }
     }
 
     /**
@@ -272,10 +295,25 @@ class InstallationWizard extends Component
     public function proceedFromDatabaseSelection(InstallationStateService $stateService): void
     {
         $this->generalError = null;
+
+        $this->validate([
+            'driver' => ['required', 'string', 'in:sqlite,mysql'],
+        ], [
+            'driver.required' => 'The driver field is required.',
+            'driver.in' => 'The selected database driver must be either SQLite or MySQL.',
+        ]);
+
         $stateService->markStepCompleted(InstallationStateService::STATE_DATABASE_SELECTION, [
             'driver' => $this->driver,
         ]);
-        $this->completedSteps[] = InstallationStateService::STATE_DATABASE_SELECTION;
+        $stateService->saveState(array_merge($stateService->getState(), [
+            'driver' => $this->driver,
+        ]));
+
+        if (! in_array(InstallationStateService::STATE_DATABASE_SELECTION, $this->completedSteps, true)) {
+            $this->completedSteps[] = InstallationStateService::STATE_DATABASE_SELECTION;
+        }
+
         $this->step = 5;
     }
 
@@ -287,6 +325,13 @@ class InstallationWizard extends Component
         InstallationStateService $stateService
     ): void {
         $this->generalError = null;
+
+        $this->validate([
+            'driver' => ['required', 'string', 'in:sqlite,mysql'],
+        ], [
+            'driver.required' => 'The driver field is required.',
+            'driver.in' => 'The selected database driver must be either SQLite or MySQL.',
+        ]);
 
         if ($this->driver === 'sqlite') {
             $this->validate([
@@ -328,7 +373,14 @@ class InstallationWizard extends Component
             'driver' => $this->driver,
             'db_config' => $dbConfig,
         ]);
-        $this->completedSteps[] = InstallationStateService::STATE_DATABASE_CONFIG;
+        $stateService->saveState(array_merge($stateService->getState(), [
+            'driver' => $this->driver,
+            'db_config' => $dbConfig,
+        ]));
+
+        if (! in_array(InstallationStateService::STATE_DATABASE_CONFIG, $this->completedSteps, true)) {
+            $this->completedSteps[] = InstallationStateService::STATE_DATABASE_CONFIG;
+        }
 
         $this->testResult = null;
         $this->connectionVerified = false;
