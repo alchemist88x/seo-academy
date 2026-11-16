@@ -55,7 +55,6 @@ use App\Livewire\Support\SupportTicketDetail;
 use App\Livewire\Support\SupportTicketsIndex;
 use App\Livewire\Trainer\TrainerCoursesIndex;
 use App\Livewire\Trainer\TrainerStudentsIndex;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -86,33 +85,6 @@ Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'showLogin'])->name('login');
     Route::post('/login', [LoginController::class, 'login'])->name('login.attempt');
 });
-
-if (app()->environment('local', 'development', 'testing')) {
-    Route::get('/dev/login-as/{role}', function (string $role) {
-        $email = request()->query('email');
-        $query = User::query();
-        if ($email) {
-            $query->where('email', $email);
-        } else {
-            $query->role($role);
-        }
-        $user = $query->firstOrFail();
-        Auth::login($user);
-        request()->session()->regenerate();
-        $academy = Academy::first();
-        if ($academy) {
-            session([TenantContext::SESSION_KEY => $academy->id]);
-        }
-        $redirectTo = match ($role) {
-            'admin' => route('admin.dashboard'),
-            'trainer' => route('trainer.dashboard'),
-            'support_staff' => route('support.dashboard'),
-            default => route('student.dashboard'),
-        };
-
-        return redirect()->intended($redirectTo);
-    })->name('dev.login-as');
-}
 
 Route::post('/logout', [LoginController::class, 'logout'])
     ->middleware('auth')

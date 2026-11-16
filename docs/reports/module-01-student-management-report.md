@@ -174,7 +174,7 @@ Duration: 4.42s
 
 Automated end-to-end browser verification was executed on Google Chrome (Headless 157.0) via the Chrome DevTools Protocol against `http://127.0.0.1:8099`:
 
-1. **Authentication:** Authenticated as Admin via `/dev/login-as/admin`, redirected to `/admin/dashboard`, navigated to `/admin/students`.
+1. **Authentication:** Authenticated as Admin via standard `/login` (with session initialization), redirected to `/admin/dashboard`, navigated to `/admin/students`.
 2. **Student Creation:** Opened "Add Student" modal, created student `QA-Browser Beginner-Student` (`qa.browser.beginner@example.com`, `+15551234`, `Cohort 2026-QA`, `Beginner`). Toast notification displayed, student table row populated with code `SEOA-2026-AKNQ8`.
 3. **Database Persistence After Refresh:** Reloaded browser at `http://127.0.0.1:8099/admin/students`. Confirmed student record, code, active badge, and `Beginner` badge persisted.
 4. **Edit & Upgrade Proficiency:** Clicked Edit icon, changed proficiency to `Intermediate`, updated batch to `Cohort 2026-QA-Updated`. Saved and verified immediate UI update. Reloaded browser and verified persistence. Edited again, updated proficiency to `Expert`, saved, reloaded browser, and verified persistence of `Expert` badge.
