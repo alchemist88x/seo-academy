@@ -1,6 +1,6 @@
-document.addEventListener('alpine:init', () => {
+function initAlpineStores() {
     const Alpine = window.Alpine;
-    if (!Alpine) return;
+    if (!Alpine || (typeof Alpine.store === 'function' && Alpine.store('theme'))) return;
 
     // Theme Store: light | dark | system
     Alpine.store('theme', {
@@ -78,7 +78,13 @@ document.addEventListener('alpine:init', () => {
             this.items = this.items.filter((item) => item.id !== id);
         },
     });
-});
+}
+
+if (window.Alpine) {
+    initAlpineStores();
+} else {
+    document.addEventListener('alpine:init', initAlpineStores);
+}
 
 // Listen for global toast events (from Livewire or JS)
 window.addEventListener('toast', (event) => {

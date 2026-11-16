@@ -55,7 +55,7 @@
                         Selected
                     </span>
                 @else
-                    <button type="button" wire:click="selectDriver('sqlite')" class="text-text-muted text-xs group-hover:text-text-primary underline">Select SQLite</button>
+                    <span class="text-text-muted text-xs group-hover:text-text-primary underline">Select SQLite</span>
                 @endif
             </div>
         </label>
@@ -99,7 +99,7 @@
                         Selected
                     </span>
                 @else
-                    <button type="button" wire:click="selectDriver('mysql')" class="text-text-muted text-xs group-hover:text-text-primary underline">Select MySQL / MariaDB</button>
+                    <span class="text-text-muted text-xs group-hover:text-text-primary underline">Select MySQL / MariaDB</span>
                 @endif
             </div>
         </label>

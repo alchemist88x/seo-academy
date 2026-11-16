@@ -28,12 +28,12 @@
 </head>
 <body
     class="min-h-screen bg-surface-bg text-text-primary antialiased"
-    :class="{ 'overflow-hidden': $store.sidebar.mobileOpen }"
+    :class="{ 'overflow-hidden': $store?.sidebar?.mobileOpen }"
     x-data
 >
     {{-- Mobile Sidebar Backdrop --}}
     <div
-        x-show="$store.sidebar.mobileOpen"
+        x-show="$store?.sidebar?.mobileOpen"
         x-transition:enter="transition-opacity ease-linear duration-200"
         x-transition:enter-start="opacity-0"
         x-transition:enter-end="opacity-100"
