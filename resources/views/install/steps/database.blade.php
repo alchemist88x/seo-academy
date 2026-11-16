@@ -5,9 +5,10 @@
     'state' => $state,
 ])
     @php
-        $selectedDriver = old('driver', $currentDriver ?? 'sqlite');
-        // Fail-safe: if any MySQL-specific validation errors occurred or old('driver') is mysql, force MySQL driver
-        if ($errors->has('host') || $errors->has('database') || $errors->has('username') || $errors->has('port') || $errors->has('password') || old('driver') === 'mysql') {
+        $selectedDriver = old('driver', request()->query('driver', $currentDriver ?? 'sqlite'));
+        $errBag = $errors ?? new \Illuminate\Support\ViewErrorBag;
+        // Fail-safe: if any MySQL-specific validation errors occurred, old('driver') is mysql, or URL query specifies mysql, force MySQL
+        if ($errBag->has('host') || $errBag->has('database') || $errBag->has('username') || $errBag->has('port') || $errBag->has('password') || old('driver') === 'mysql' || request()->query('driver') === 'mysql') {
             $selectedDriver = 'mysql';
         }
         $isMysql = ($selectedDriver === 'mysql');
@@ -17,90 +18,70 @@
         $dbUser = old('username', $state['db_config']['username'] ?? 'root');
     @endphp
 
-    {{-- Pure CSS reactive engine switching: 100% immune to JS failures, race conditions, or Alpine timing --}}
-    <style>
-        #db-config-form:has(#staged-engine-mysql:checked) #mysql-config-panel {
-            display: block !important;
-        }
-        #db-config-form:has(#staged-engine-mysql:checked) #sqlite-config-panel {
-            display: none !important;
-        }
-        #db-config-form:has(#staged-engine-mysql:checked) #card-engine-mysql {
-            border-color: rgb(37 99 235) !important;
-            background-color: rgba(37, 99, 235, 0.1) !important;
-            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3) !important;
-        }
-        #db-config-form:has(#staged-engine-mysql:checked) #card-engine-sqlite {
-            border-color: rgba(255, 255, 255, 0.12) !important;
-            background-color: rgba(255, 255, 255, 0.02) !important;
-            box-shadow: none !important;
-        }
-        #db-config-form:has(#staged-engine-mysql:checked) #mysql-status-selected {
-            display: inline !important;
-        }
-        #db-config-form:has(#staged-engine-mysql:checked) #mysql-status-unselected {
-            display: none !important;
-        }
-        #db-config-form:has(#staged-engine-mysql:checked) #sqlite-status-selected {
-            display: none !important;
-        }
-        #db-config-form:has(#staged-engine-mysql:checked) #sqlite-status-unselected {
-            display: inline !important;
-        }
-        #db-config-form:has(#staged-engine-mysql:checked) #btn-quick-configure-mysql {
-            display: none !important;
-        }
-        #db-config-form:has(#staged-engine-mysql:checked) #btn-quick-switch-sqlite {
-            display: inline-flex !important;
-        }
-
-        #db-config-form:has(#staged-engine-sqlite:checked) #sqlite-config-panel {
-            display: block !important;
-        }
-        #db-config-form:has(#staged-engine-sqlite:checked) #mysql-config-panel {
-            display: none !important;
-        }
-        #db-config-form:has(#staged-engine-sqlite:checked) #card-engine-sqlite {
-            border-color: rgb(37 99 235) !important;
-            background-color: rgba(37, 99, 235, 0.1) !important;
-            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3) !important;
-        }
-        #db-config-form:has(#staged-engine-sqlite:checked) #card-engine-mysql {
-            border-color: rgba(255, 255, 255, 0.12) !important;
-            background-color: rgba(255, 255, 255, 0.02) !important;
-            box-shadow: none !important;
-        }
-        #db-config-form:has(#staged-engine-sqlite:checked) #sqlite-status-selected {
-            display: inline !important;
-        }
-        #db-config-form:has(#staged-engine-sqlite:checked) #sqlite-status-unselected {
-            display: none !important;
-        }
-        #db-config-form:has(#staged-engine-sqlite:checked) #mysql-status-selected {
-            display: none !important;
-        }
-        #db-config-form:has(#staged-engine-sqlite:checked) #mysql-status-unselected {
-            display: inline !important;
-        }
-        #db-config-form:has(#staged-engine-sqlite:checked) #btn-quick-configure-mysql {
-            display: inline-flex !important;
-        }
-        #db-config-form:has(#staged-engine-sqlite:checked) #btn-quick-switch-sqlite {
-            display: none !important;
-        }
-    </style>
-
     <script>
-        // Define global switchDatabaseEngine immediately before DOM elements render
+        // Global engine switcher: updates DOM directly, works 100% reliably in every browser regardless of Alpine or CSS
         window.switchDatabaseEngine = function (driver) {
             const isMysql = (driver === 'mysql');
             const sqliteRadio = document.getElementById('staged-engine-sqlite');
             const mysqlRadio = document.getElementById('staged-engine-mysql');
+            const sqlitePanel = document.getElementById('sqlite-config-panel');
+            const mysqlPanel = document.getElementById('mysql-config-panel');
+            const sqliteCard = document.getElementById('card-engine-sqlite');
+            const mysqlCard = document.getElementById('card-engine-mysql');
+            const sqliteStatusSelected = document.getElementById('sqlite-status-selected');
+            const sqliteStatusUnselected = document.getElementById('sqlite-status-unselected');
+            const mysqlStatusSelected = document.getElementById('mysql-status-selected');
+            const mysqlStatusUnselected = document.getElementById('mysql-status-unselected');
+            const btnQuickConfigureMysql = document.getElementById('btn-quick-configure-mysql');
+            const btnQuickSwitchSqlite = document.getElementById('btn-quick-switch-sqlite');
+            const activeDriverBadge = document.getElementById('active-driver-badge');
 
             if (sqliteRadio) sqliteRadio.checked = !isMysql;
             if (mysqlRadio) mysqlRadio.checked = isMysql;
 
-            // Populate defaults if fields are empty
+            // Direct DOM display manipulation
+            if (mysqlPanel) {
+                mysqlPanel.style.setProperty('display', isMysql ? 'block' : 'none', 'important');
+            }
+            if (sqlitePanel) {
+                sqlitePanel.style.setProperty('display', !isMysql ? 'block' : 'none', 'important');
+            }
+
+            // Status badges
+            if (mysqlStatusSelected) mysqlStatusSelected.style.setProperty('display', isMysql ? 'inline' : 'none', 'important');
+            if (mysqlStatusUnselected) mysqlStatusUnselected.style.setProperty('display', !isMysql ? 'inline' : 'none', 'important');
+            if (sqliteStatusSelected) sqliteStatusSelected.style.setProperty('display', !isMysql ? 'inline' : 'none', 'important');
+            if (sqliteStatusUnselected) sqliteStatusUnselected.style.setProperty('display', isMysql ? 'inline' : 'none', 'important');
+
+            // Quick action buttons
+            if (btnQuickConfigureMysql) btnQuickConfigureMysql.style.setProperty('display', isMysql ? 'none' : 'inline-flex', 'important');
+            if (btnQuickSwitchSqlite) btnQuickSwitchSqlite.style.setProperty('display', !isMysql ? 'none' : 'inline-flex', 'important');
+
+            if (activeDriverBadge) {
+                activeDriverBadge.textContent = isMysql ? 'MYSQL' : 'SQLITE';
+            }
+
+            // Card highlight classes
+            if (mysqlCard) {
+                if (isMysql) {
+                    mysqlCard.classList.add('border-primary-500', 'bg-primary-500/10', 'ring-2', 'ring-primary-500/30');
+                    mysqlCard.classList.remove('border-border-default', 'bg-surface-elevated/40');
+                } else {
+                    mysqlCard.classList.remove('border-primary-500', 'bg-primary-500/10', 'ring-2', 'ring-primary-500/30');
+                    mysqlCard.classList.add('border-border-default', 'bg-surface-elevated/40');
+                }
+            }
+            if (sqliteCard) {
+                if (!isMysql) {
+                    sqliteCard.classList.add('border-primary-500', 'bg-primary-500/10', 'ring-2', 'ring-primary-500/30');
+                    sqliteCard.classList.remove('border-border-default', 'bg-surface-elevated/40');
+                } else {
+                    sqliteCard.classList.remove('border-primary-500', 'bg-primary-500/10', 'ring-2', 'ring-primary-500/30');
+                    sqliteCard.classList.add('border-border-default', 'bg-surface-elevated/40');
+                }
+            }
+
+            // Populate MySQL defaults if fields are empty
             if (isMysql) {
                 const hostEl = document.getElementById('db_host');
                 const portEl = document.getElementById('db_port');
@@ -112,14 +93,7 @@
                 if (userEl && !userEl.value) userEl.value = 'root';
             }
 
-            // Fire native change events so Alpine and forms stay synced
-            if (isMysql && mysqlRadio) {
-                mysqlRadio.dispatchEvent(new Event('change', { bubbles: true }));
-            } else if (!isMysql && sqliteRadio) {
-                sqliteRadio.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-
-            // Sync Alpine state if present
+            // Sync Alpine state if initialized
             const container = document.getElementById('db-wizard-container');
             if (window.Alpine && container && typeof window.Alpine.$data === 'function') {
                 try {
@@ -169,12 +143,13 @@
                 </div>
             @enderror
 
-            {{-- Driver Switch Cards (Native HTML Labels wrapping Radio Inputs) --}}
+            {{-- Driver Switch Cards --}}
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" role="radiogroup" aria-label="Database Engine Selection">
                 {{-- SQLite Card --}}
                 <label
                     for="staged-engine-sqlite"
                     id="card-engine-sqlite"
+                    onclick="window.switchDatabaseEngine('sqlite')"
                     @click="switchEngine('sqlite')"
                     :class="driver === 'sqlite' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover'"
                     class="p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between {{ ! $isMysql ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover' }}"
@@ -188,6 +163,7 @@
                                     name="driver"
                                     value="sqlite"
                                     x-model="driver"
+                                    onclick="window.switchDatabaseEngine('sqlite')"
                                     @change="switchEngine('sqlite')"
                                     {{ ! $isMysql ? 'checked' : '' }}
                                     class="w-4 h-4 text-primary-600 focus:ring-primary-500 border-border-default cursor-pointer"
@@ -204,8 +180,8 @@
 
                     <div class="mt-3 pt-2 border-t border-border-default/60 flex items-center justify-between text-xs">
                         <span class="text-[11px] text-text-muted">Single-file database</span>
-                        <span id="sqlite-status-selected" class="text-primary-600 dark:text-primary-400 font-bold text-xs" style="{{ $isMysql ? 'display: none;' : '' }}">Selected</span>
-                        <span id="sqlite-status-unselected" class="text-text-muted text-xs" style="{{ ! $isMysql ? 'display: none;' : '' }}">Click to select</span>
+                        <span id="sqlite-status-selected" class="text-primary-600 dark:text-primary-400 font-bold text-xs" style="{{ $isMysql ? 'display: none !important;' : '' }}">Selected</span>
+                        <span id="sqlite-status-unselected" class="text-text-muted text-xs" style="{{ ! $isMysql ? 'display: none !important;' : '' }}">Click to select</span>
                     </div>
                 </label>
 
@@ -213,6 +189,7 @@
                 <label
                     for="staged-engine-mysql"
                     id="card-engine-mysql"
+                    onclick="window.switchDatabaseEngine('mysql')"
                     @click="switchEngine('mysql')"
                     :class="driver === 'mysql' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover'"
                     class="p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between {{ $isMysql ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover' }}"
@@ -226,6 +203,7 @@
                                     name="driver"
                                     value="mysql"
                                     x-model="driver"
+                                    onclick="window.switchDatabaseEngine('mysql')"
                                     @change="switchEngine('mysql')"
                                     {{ $isMysql ? 'checked' : '' }}
                                     class="w-4 h-4 text-primary-600 focus:ring-primary-500 border-border-default cursor-pointer"
@@ -242,8 +220,8 @@
 
                     <div class="mt-3 pt-2 border-t border-border-default/60 flex items-center justify-between text-xs">
                         <span class="text-[11px] text-text-muted">High concurrency engine</span>
-                        <span id="mysql-status-selected" class="text-primary-600 dark:text-primary-400 font-bold text-xs" style="{{ ! $isMysql ? 'display: none;' : '' }}">Selected</span>
-                        <span id="mysql-status-unselected" class="text-text-muted text-xs" style="{{ $isMysql ? 'display: none;' : '' }}">Click to select</span>
+                        <span id="mysql-status-selected" class="text-primary-600 dark:text-primary-400 font-bold text-xs" style="{{ ! $isMysql ? 'display: none !important;' : '' }}">Selected</span>
+                        <span id="mysql-status-unselected" class="text-text-muted text-xs" style="{{ $isMysql ? 'display: none !important;' : '' }}">Click to select</span>
                     </div>
                 </label>
             </div>
@@ -252,7 +230,7 @@
             <div class="p-3.5 rounded-xl bg-surface-elevated/40 border border-border-default flex items-center justify-between text-xs">
                 <div class="flex items-center gap-2">
                     <span class="text-text-muted">Active Database Driver:</span>
-                    <span class="font-bold font-mono uppercase text-primary-600 dark:text-primary-400 text-sm" x-text="driver">{{ $selectedDriver }}</span>
+                    <span id="active-driver-badge" class="font-bold font-mono uppercase text-primary-600 dark:text-primary-400 text-sm" x-text="driver">{{ $selectedDriver }}</span>
                 </div>
                 <div class="flex items-center gap-2">
                     <button
@@ -261,7 +239,7 @@
                         @click="switchEngine('mysql')"
                         onclick="window.switchDatabaseEngine('mysql')"
                         class="px-3 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-semibold text-xs transition-colors cursor-pointer"
-                        style="{{ $isMysql ? 'display: none;' : '' }}"
+                        style="{{ $isMysql ? 'display: none !important;' : '' }}"
                     >
                         Configure MySQL Connection &rarr;
                     </button>
@@ -271,7 +249,7 @@
                         @click="switchEngine('sqlite')"
                         onclick="window.switchDatabaseEngine('sqlite')"
                         class="px-3 py-1.5 rounded-lg bg-surface-card hover:bg-surface-elevated border border-border-default text-text-primary font-semibold text-xs transition-colors cursor-pointer"
-                        style="{{ ! $isMysql ? 'display: none;' : '' }}"
+                        style="{{ ! $isMysql ? 'display: none !important;' : '' }}"
                     >
                         &larr; Switch Back to SQLite
                     </button>
@@ -281,7 +259,8 @@
             {{-- SQLite Details Panel --}}
             <div
                 id="sqlite-config-panel"
-                style="{{ $isMysql ? 'display: none;' : '' }}"
+                x-show="driver === 'sqlite'"
+                style="{{ $isMysql ? 'display: none !important;' : '' }}"
                 class="p-4 rounded-xl bg-surface-elevated/40 border border-border-default space-y-3"
             >
                 <div class="flex items-center gap-2">
@@ -301,7 +280,8 @@
             {{-- MySQL Fields Panel --}}
             <div
                 id="mysql-config-panel"
-                style="{{ ! $isMysql ? 'display: none;' : '' }}"
+                x-show="driver === 'mysql'"
+                style="{{ ! $isMysql ? 'display: none !important;' : '' }}"
                 class="space-y-4 p-5 rounded-xl bg-surface-elevated/40 border border-border-default"
             >
                 <div class="flex items-center justify-between pb-2 border-b border-border-default/60">

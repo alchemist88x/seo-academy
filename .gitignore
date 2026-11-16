@@ -17,8 +17,8 @@
 # ------------------------------------------------------------------------------
 /vendor/
 /node_modules/
-/composer.lock
-/package-lock.json
+composer.lock
+package-lock.json
 
 # ------------------------------------------------------------------------------
 # Databases & Backups (Preserve active dev DB and test databases locally only)

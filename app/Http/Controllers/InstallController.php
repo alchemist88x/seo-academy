@@ -244,7 +244,7 @@ class InstallController extends Controller
         }
 
         $state = $this->stateService->getState();
-        $driver = $state['driver'] ?? config('database.default', 'sqlite');
+        $driver = request()->query('driver', $state['driver'] ?? config('database.default', 'sqlite'));
 
         return view('install.steps.database', [
             'state' => $state,
