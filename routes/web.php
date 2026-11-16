@@ -89,7 +89,14 @@ Route::middleware('guest')->group(function () {
 
 if (app()->environment('local', 'development', 'testing')) {
     Route::get('/dev/login-as/{role}', function (string $role) {
-        $user = User::role($role)->firstOrFail();
+        $email = request()->query('email');
+        $query = User::query();
+        if ($email) {
+            $query->where('email', $email);
+        } else {
+            $query->role($role);
+        }
+        $user = $query->firstOrFail();
         Auth::login($user);
         request()->session()->regenerate();
         $academy = Academy::first();

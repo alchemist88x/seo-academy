@@ -278,5 +278,11 @@ class StagedInstallationTest extends TestCase
             'driver' => 'mysql',
         ]);
         $incompleteMysql->assertSessionHasErrors(['host', 'database', 'username']);
+
+        // 4. Follow redirect back: ensure view renders MySQL as selected driver with error hints
+        $redirectResponse = $this->get(route('install.step.database'));
+        $redirectResponse->assertStatus(200);
+        $redirectResponse->assertSee('MySQL 8.4+ Database Configuration');
+        $redirectResponse->assertSee("initialDriver = 'mysql'", false);
     }
 }

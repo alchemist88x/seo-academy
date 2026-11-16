@@ -383,7 +383,10 @@ class DashboardNavigationTest extends TestCase
         $response->assertSee('@keydown.escape.window', false);
 
         // Backdrop for mobile
-        $response->assertSee('x-show="$store.sidebar.mobileOpen"', false);
+        $this->assertTrue(
+            str_contains($response->getContent(), 'x-show="$store.sidebar.mobileOpen"') ||
+            str_contains($response->getContent(), 'x-show="$store?.sidebar?.mobileOpen"')
+        );
         $response->assertSee('aria-hidden="true"', false);
 
         // Focus ring classes

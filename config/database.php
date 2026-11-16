@@ -53,7 +53,7 @@ return [
             'url' => env('DB_URL'),
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '3306'),
-            'database' => env('DB_DATABASE', 'seo_academy'),
+            'database' => env('DB_MYSQL_DATABASE', (env('DB_DATABASE') && ! str_ends_with(env('DB_DATABASE'), '.sqlite') ? env('DB_DATABASE') : 'seo_academy')),
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
             'unix_socket' => env('DB_SOCKET', ''),

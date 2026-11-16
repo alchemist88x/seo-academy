@@ -175,6 +175,11 @@ class Enrollment extends Model
         return $this->hasMany(Certificate::class, 'original_enrollment_id')->orderBy('version', 'desc');
     }
 
+    public function certificate(): HasOne
+    {
+        return $this->hasOne(Certificate::class, 'enrollment_id')->latestOfMany('issued_at');
+    }
+
     public function activeCertificate(): HasOne
     {
         return $this->hasOne(Certificate::class, 'enrollment_id');
