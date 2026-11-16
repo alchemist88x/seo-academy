@@ -8,10 +8,11 @@
         class="space-y-6"
         x-data="{
             driver: @js(old('driver', $currentDriver ?? 'sqlite')),
+            hostingType: 'local',
             host: @js(old('host', '127.0.0.1')),
             port: @js(old('port', '3306')),
-            database: @js(old('database', '')),
-            username: @js(old('username', '')),
+            database: @js(old('database', 'seo_academy')),
+            username: @js(old('username', 'seo_academy_user')),
             password: '',
             confirmSwitch: false,
             testing: false,
@@ -20,6 +21,20 @@
             selectDriver(d) {
                 this.driver = d;
                 this.testResult = null;
+            },
+
+            selectHostingType(t) {
+                this.hostingType = t;
+                this.testResult = null;
+                if (t === 'local') {
+                    this.host = '127.0.0.1';
+                    this.port = '3306';
+                } else if (t === 'rds' || t === 'remote') {
+                    if (this.host === '127.0.0.1') {
+                        this.host = '';
+                    }
+                    this.port = '3306';
+                }
             },
 
             async testConnection() {
@@ -174,22 +189,77 @@
             </div>
 
             {{-- MySQL Fields --}}
-            <div x-show="driver === 'mysql'" class="space-y-4 p-4 rounded-lg bg-surface-elevated/40 border border-border-default" style="display: none;">
-                <span class="text-xs font-bold text-text-primary block">MySQL Connection Credentials</span>
+            <div x-show="driver === 'mysql'" class="space-y-4 p-5 rounded-xl bg-surface-elevated/40 border border-border-default" style="display: none;">
+                {{-- Hosting Type Selector --}}
+                <div>
+                    <label class="block text-xs font-bold text-text-primary mb-2">Database Hosting Type</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                        <button
+                            type="button"
+                            @click="selectHostingType('local')"
+                            class="p-3 rounded-lg border text-left text-xs transition-all"
+                            :class="hostingType === 'local' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/20 font-bold' : 'border-border-default bg-surface-card hover:border-border-hover'"
+                        >
+                            <span class="block text-text-primary font-bold">Local MySQL</span>
+                            <span class="text-[10px] text-text-muted">CloudPanel / VPS</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            @click="selectHostingType('rds')"
+                            class="p-3 rounded-lg border text-left text-xs transition-all"
+                            :class="hostingType === 'rds' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/20 font-bold' : 'border-border-default bg-surface-card hover:border-border-hover'"
+                        >
+                            <span class="block text-text-primary font-bold">Amazon RDS</span>
+                            <span class="text-[10px] text-text-muted">AWS Database</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            @click="selectHostingType('remote')"
+                            class="p-3 rounded-lg border text-left text-xs transition-all"
+                            :class="hostingType === 'remote' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/20 font-bold' : 'border-border-default bg-surface-card hover:border-border-hover'"
+                        >
+                            <span class="block text-text-primary font-bold">Remote Server</span>
+                            <span class="text-[10px] text-text-muted">External Host</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            @click="selectHostingType('custom')"
+                            class="p-3 rounded-lg border text-left text-xs transition-all"
+                            :class="hostingType === 'custom' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/20 font-bold' : 'border-border-default bg-surface-card hover:border-border-hover'"
+                        >
+                            <span class="block text-text-primary font-bold">Custom</span>
+                            <span class="text-[10px] text-text-muted">Manual Setup</span>
+                        </button>
+                    </div>
+                </div>
+
+                {{-- CloudPanel Specific Assistance --}}
+                <div x-show="hostingType === 'local'" class="p-3.5 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-text-secondary space-y-2">
+                    <span class="font-bold text-xs text-blue-900 dark:text-blue-200 block">CloudPanel Setup Guide</span>
+                    <ol class="list-decimal list-inside space-y-1 text-[11px] text-text-secondary">
+                        <li>Open CloudPanel and navigate to your site's <strong>Databases</strong> section.</li>
+                        <li>Create a database (e.g. <code class="font-mono text-primary-600">seo_academy</code>) and database user.</li>
+                        <li>Assign full schema privileges to the user.</li>
+                        <li>Enter credentials below. Recommended local connection: <code class="font-mono">DB_HOST=127.0.0.1</code>, <code class="font-mono">DB_PORT=3306</code>.</li>
+                    </ol>
+                </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="sm:col-span-2">
-                        <label class="block text-xs font-medium text-text-secondary mb-1">Server Host</label>
+                        <label class="block text-xs font-medium text-text-secondary mb-1">Database Server Host *</label>
                         <input
                             type="text"
                             name="host"
                             x-model="host"
-                            placeholder="127.0.0.1 or localhost"
+                            placeholder="127.0.0.1"
                             class="input input-sm w-full text-xs font-mono"
                         >
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-text-secondary mb-1">Port</label>
+                        <label class="block text-xs font-medium text-text-secondary mb-1">Port *</label>
                         <input
                             type="number"
                             name="port"
@@ -202,7 +272,7 @@
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                        <label class="block text-xs font-medium text-text-secondary mb-1">Database Name</label>
+                        <label class="block text-xs font-medium text-text-secondary mb-1">Database Name *</label>
                         <input
                             type="text"
                             name="database"
@@ -212,12 +282,12 @@
                         >
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-text-secondary mb-1">Username</label>
+                        <label class="block text-xs font-medium text-text-secondary mb-1">Username *</label>
                         <input
                             type="text"
                             name="username"
                             x-model="username"
-                            placeholder="academy_user"
+                            placeholder="seo_academy_user"
                             class="input input-sm w-full text-xs font-mono"
                         >
                     </div>

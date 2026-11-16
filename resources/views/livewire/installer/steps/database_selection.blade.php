@@ -36,19 +36,19 @@
                             class="w-4 h-4 text-primary-600 focus:ring-primary-500 border-border-default cursor-pointer"
                         />
                         <svg class="w-6 h-6 {{ $driver === 'sqlite' ? 'text-primary-600 dark:text-primary-400' : 'text-text-muted group-hover:text-primary-500' }} transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
-                        SQLite 3
+                        SQLite
                     </span>
                     <span class="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full {{ $driver === 'sqlite' ? 'bg-primary-600 text-white' : 'bg-surface-elevated text-text-muted border border-border-default' }}">
-                        Recommended
+                        Recommended for Small Installations
                     </span>
                 </div>
                 <p class="text-xs text-text-secondary leading-relaxed pl-6">
-                    Zero configuration required. All data is saved inside an optimized, single-file database stored securely in private storage outside the web document root (<code class="font-mono text-[11px] text-primary-600 dark:text-primary-400">storage/app/private/</code>).
+                    Lightweight, file-based database. No database server required. All data is saved inside an optimized, single-file database stored securely in private application storage (<code class="font-mono text-[11px] text-primary-600 dark:text-primary-400">storage/app/private/</code>).
                 </p>
             </div>
 
             <div class="mt-4 pt-3 border-t border-border-default/60 flex items-center justify-between text-xs">
-                <span class="text-text-muted text-[11px]">Best for: Shared Hosting &bull; VPS &bull; Single Academy</span>
+                <span class="text-text-muted text-[11px]">Best for: Shared Hosting &bull; Standalone VPS &bull; Rapid Setup</span>
                 @if ($driver === 'sqlite')
                     <span class="flex items-center gap-1 font-bold text-primary-600 dark:text-primary-400 text-xs">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
@@ -80,26 +80,26 @@
                             class="w-4 h-4 text-primary-600 focus:ring-primary-500 border-border-default cursor-pointer"
                         />
                         <svg class="w-6 h-6 {{ $driver === 'mysql' ? 'text-primary-600 dark:text-primary-400' : 'text-text-muted group-hover:text-primary-500' }} transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                        MySQL 8.4+ InnoDB
+                        MySQL / MariaDB
                     </span>
                     <span class="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full {{ $driver === 'mysql' ? 'bg-primary-600 text-white' : 'bg-surface-elevated text-text-muted border border-border-default' }}">
-                        Dedicated Server
+                        Recommended for Production
                     </span>
                 </div>
                 <p class="text-xs text-text-secondary leading-relaxed pl-6">
-                    Connects to an external or local MySQL 8.4+ / MariaDB 10.11+ server with InnoDB engine and utf8mb4 encoding. Recommended for growing academies with large student bodies and heavy concurrent loads.
+                    Connect to a dedicated database server for production deployments. Supports Hostinger KVM VPS with CloudPanel, Ubuntu VPS, Amazon RDS, and remote MySQL 8.4+ / MariaDB 10.11+ servers with InnoDB.
                 </p>
             </div>
 
             <div class="mt-4 pt-3 border-t border-border-default/60 flex items-center justify-between text-xs">
-                <span class="text-text-muted text-[11px]">Best for: Dedicated DB Servers &bull; High Concurrency</span>
+                <span class="text-text-muted text-[11px]">Best for: CloudPanel &bull; VPS &bull; Amazon RDS &bull; Concurrency</span>
                 @if ($driver === 'mysql')
                     <span class="flex items-center gap-1 font-bold text-primary-600 dark:text-primary-400 text-xs">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
                         Selected
                     </span>
                 @else
-                    <button type="button" wire:click="selectDriver('mysql')" class="text-text-muted text-xs group-hover:text-text-primary underline">Select MySQL</button>
+                    <button type="button" wire:click="selectDriver('mysql')" class="text-text-muted text-xs group-hover:text-text-primary underline">Select MySQL / MariaDB</button>
                 @endif
             </div>
         </label>
@@ -120,23 +120,6 @@
         >
             &larr; Back to Dependencies
         </button>
-
-        <button
-            type="button"
-            wire:click="proceedFromDatabaseSelection"
-            wire:loading.attr="disabled"
-            class="btn btn-primary px-6 py-2.5 text-xs font-bold rounded-lg shadow-sm flex items-center gap-2 cursor-pointer"
-        >
-            <span wire:loading.remove wire:target="proceedFromDatabaseSelection">
-                Configure {{ $driver === 'sqlite' ? 'SQLite' : 'MySQL' }} &rarr;
-            </span>
-            <span wire:loading wire:target="proceedFromDatabaseSelection" class="flex items-center gap-2">
-                <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-                Saving...
-            </span>
-        </button>
-    </div>
-</div>
 
         <button
             type="button"

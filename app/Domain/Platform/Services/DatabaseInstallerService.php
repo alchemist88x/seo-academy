@@ -1025,9 +1025,9 @@ class DatabaseInstallerService
     }
 
     /**
-     * Validate SQLite storage directory/file, verify PDO connectivity, and inspect existing tables.
+     * Validate SQLite storage directory/file, check SQLite version >= 3.35.0, verify PDO connectivity, and inspect existing tables.
      *
-     * @return array{ok: bool, driver: string, message: string}
+     * @return array{ok: bool, driver: string, message: string, engine?: string, version?: string}
      */
     public function testSqliteConnection(?string $path = null): array
     {
@@ -1042,11 +1042,24 @@ class DatabaseInstallerService
             $pdo->exec('PRAGMA foreign_keys = ON;');
             $pdo->query('SELECT 1')->fetchColumn();
 
+            $sqliteVersion = (string) $pdo->query('SELECT sqlite_version()')->fetchColumn();
+            if (version_compare($sqliteVersion, '3.35.0', '<')) {
+                return [
+                    'ok' => false,
+                    'driver' => 'sqlite',
+                    'engine' => 'SQLite',
+                    'version' => $sqliteVersion,
+                    'message' => "Unsupported SQLite version ({$sqliteVersion}). SEO Academy requires SQLite 3.35.0 or higher.",
+                ];
+            }
+
             $inspection = $this->inspectDatabase($pdo, 'sqlite');
             if (in_array($inspection['status'], ['unrelated_tables', 'unrelated_database', 'installed_academy_exists', 'ambiguous'], true)) {
                 return [
                     'ok' => false,
                     'driver' => 'sqlite',
+                    'engine' => 'SQLite',
+                    'version' => $sqliteVersion,
                     'message' => $inspection['message'],
                 ];
             }
@@ -1054,9 +1067,11 @@ class DatabaseInstallerService
             return [
                 'ok' => true,
                 'driver' => 'sqlite',
+                'engine' => 'SQLite',
+                'version' => $sqliteVersion,
                 'message' => $inspection['status'] === 'partial_installation'
                     ? $inspection['message']
-                    : 'SQLite connection successful and private storage directory is writable.',
+                    : "SQLite connection verified (SQLite {$sqliteVersion}). Storage directory is secure and writable.",
             ];
         } catch (Throwable $e) {
             $sanitized = $this->sanitizeErrorMessage($e->getMessage());
@@ -1071,10 +1086,11 @@ class DatabaseInstallerService
     }
 
     /**
-     * Validate MySQL PDO connectivity, InnoDB support, required DDL/DML permissions, and inspect existing tables.
+     * Validate MySQL PDO connectivity, detect engine (MySQL vs MariaDB), verify minimum versions (MySQL 8.0+ / MariaDB 10.11+),
+     * verify InnoDB support, test query execution, required DDL/DML permissions, and inspect existing tables.
      *
      * @param  array{host: string, port?: int|string|null, database: string, username: string, password?: string|null}  $config
-     * @return array{ok: bool, driver: string, message: string}
+     * @return array{ok: bool, driver: string, message: string, engine?: string, version?: string, raw_version?: string, innodb?: bool}
      */
     public function testMySqlConnection(array $config): array
     {
@@ -1105,14 +1121,55 @@ class DatabaseInstallerService
                 PDO::ATTR_TIMEOUT => 5,
             ]);
 
+            // 1. Detect server engine and version
+            $rawVersion = (string) $pdo->getAttribute(PDO::ATTR_SERVER_VERSION);
+            $isMariaDb = stripos($rawVersion, 'mariadb') !== false;
+            $engineName = $isMariaDb ? 'MariaDB' : 'MySQL';
+
+            preg_match('/(\d+\.\d+(\.\d+)?)/', $rawVersion, $matches);
+            $cleanVersion = $matches[1] ?? $rawVersion;
+
+            // 2. Validate version compatibility
+            if ($isMariaDb) {
+                if (version_compare($cleanVersion, '10.11.0', '<')) {
+                    return [
+                        'ok' => false,
+                        'driver' => 'mysql',
+                        'engine' => 'MariaDB',
+                        'version' => $cleanVersion,
+                        'raw_version' => $rawVersion,
+                        'message' => "Unsupported MariaDB version ({$cleanVersion}). SEO Academy requires MariaDB 10.11+ LTS with InnoDB.",
+                    ];
+                }
+            } else {
+                if (version_compare($cleanVersion, '8.0.0', '<')) {
+                    return [
+                        'ok' => false,
+                        'driver' => 'mysql',
+                        'engine' => 'MySQL',
+                        'version' => $cleanVersion,
+                        'raw_version' => $rawVersion,
+                        'message' => "Unsupported MySQL version ({$cleanVersion}). SEO Academy requires MySQL 8.4+ (minimum 8.0) with InnoDB.",
+                    ];
+                }
+            }
+
+            // 3. Execute basic test query & verify InnoDB storage engine
+            $pdo->query('SELECT 1')->fetchColumn();
             $this->assertInnoDbSupported($pdo);
+
+            // 4. Verify required DDL/DML permissions
             $this->assertMySqlPermissions($pdo);
 
+            // 5. Inspect database schema tables
             $inspection = $this->inspectDatabase($pdo, 'mysql');
             if (in_array($inspection['status'], ['unrelated_tables', 'unrelated_database', 'installed_academy_exists', 'ambiguous'], true)) {
                 return [
                     'ok' => false,
                     'driver' => 'mysql',
+                    'engine' => $engineName,
+                    'version' => $cleanVersion,
+                    'raw_version' => $rawVersion,
                     'message' => $inspection['message'],
                 ];
             }
@@ -1120,9 +1177,13 @@ class DatabaseInstallerService
             return [
                 'ok' => true,
                 'driver' => 'mysql',
+                'engine' => $engineName,
+                'version' => $cleanVersion,
+                'raw_version' => $rawVersion,
+                'innodb' => true,
                 'message' => $inspection['status'] === 'partial_installation'
                     ? $inspection['message']
-                    : 'MySQL connection, InnoDB support, and required database permissions verified.',
+                    : "Successfully connected to {$engineName} {$cleanVersion}. InnoDB storage engine and schema privileges verified.",
             ];
         } catch (Throwable $e) {
             $sanitized = $this->sanitizeErrorMessage($e->getMessage(), $password, $username);

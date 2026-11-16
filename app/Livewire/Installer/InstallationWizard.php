@@ -28,13 +28,15 @@ class InstallationWizard extends Component
 
     public string $sqlitePath = '';
 
+    public string $mysqlHostingType = 'local'; // 'local', 'rds', 'remote', 'custom'
+
     public string $mysqlHost = '127.0.0.1';
 
     public string $mysqlPort = '3306';
 
-    public string $mysqlDatabase = '';
+    public string $mysqlDatabase = 'seo_academy';
 
-    public string $mysqlUsername = '';
+    public string $mysqlUsername = 'seo_academy_user';
 
     public string $mysqlPassword = '';
 
@@ -121,6 +123,7 @@ class InstallationWizard extends Component
 
         if (! empty($state['db_config'])) {
             $cfg = $state['db_config'];
+            $this->mysqlHostingType = $cfg['hosting_type'] ?? $this->mysqlHostingType;
             $this->mysqlHost = $cfg['host'] ?? $this->mysqlHost;
             $this->mysqlPort = (string) ($cfg['port'] ?? $this->mysqlPort);
             $this->mysqlDatabase = $cfg['database'] ?? $this->mysqlDatabase;
@@ -318,6 +321,71 @@ class InstallationWizard extends Component
     }
 
     /**
+     * Step 5: Select MySQL Hosting Type.
+     */
+    public function selectHostingType(string $type): void
+    {
+        if (! in_array($type, ['local', 'rds', 'remote', 'custom'], true)) {
+            return;
+        }
+
+        $this->mysqlHostingType = $type;
+        $this->connectionVerified = false;
+        $this->testResult = null;
+
+        if ($type === 'local') {
+            $this->mysqlHost = '127.0.0.1';
+            $this->mysqlPort = '3306';
+        } elseif ($type === 'rds') {
+            if ($this->mysqlHost === '127.0.0.1' || empty($this->mysqlHost)) {
+                $this->mysqlHost = '';
+            }
+            $this->mysqlPort = '3306';
+        } elseif ($type === 'remote') {
+            if ($this->mysqlHost === '127.0.0.1' || empty($this->mysqlHost)) {
+                $this->mysqlHost = '';
+            }
+            $this->mysqlPort = '3306';
+        }
+    }
+
+    public function updatedMysqlHost(): void
+    {
+        $this->connectionVerified = false;
+        $this->testResult = null;
+    }
+
+    public function updatedMysqlPort(): void
+    {
+        $this->connectionVerified = false;
+        $this->testResult = null;
+    }
+
+    public function updatedMysqlDatabase(): void
+    {
+        $this->connectionVerified = false;
+        $this->testResult = null;
+    }
+
+    public function updatedMysqlUsername(): void
+    {
+        $this->connectionVerified = false;
+        $this->testResult = null;
+    }
+
+    public function updatedMysqlPassword(): void
+    {
+        $this->connectionVerified = false;
+        $this->testResult = null;
+    }
+
+    public function updatedSqlitePath(): void
+    {
+        $this->connectionVerified = false;
+        $this->testResult = null;
+    }
+
+    /**
      * Step 5: Save Database Configuration.
      */
     public function saveDatabaseConfiguration(
@@ -353,6 +421,7 @@ class InstallationWizard extends Component
 
             $dbConfig = [
                 'driver' => 'mysql',
+                'hosting_type' => $this->mysqlHostingType,
                 'host' => $this->mysqlHost,
                 'port' => (int) $this->mysqlPort,
                 'database' => $this->mysqlDatabase,

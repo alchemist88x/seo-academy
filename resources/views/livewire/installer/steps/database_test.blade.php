@@ -7,7 +7,7 @@
     </div>
 
     {{-- Database Connection Summary Card --}}
-    <div class="p-4 rounded-xl bg-surface-elevated/40 border border-border-default space-y-3">
+    <div class="p-5 rounded-2xl bg-surface-elevated/40 border border-border-default space-y-3">
         <div class="flex items-center justify-between pb-2 border-b border-border-default/60">
             <span class="text-xs font-bold text-text-primary uppercase tracking-wider">Target Connection Summary</span>
             <span class="font-mono text-xs font-bold px-2 py-0.5 rounded bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/20">
@@ -31,6 +31,20 @@
                 </div>
             @else
                 <div>
+                    <span class="text-text-muted text-[11px] block">Hosting Deployment</span>
+                    <span class="font-bold text-text-primary uppercase text-[11px]">
+                        @if ($mysqlHostingType === 'local')
+                            Local MySQL / MariaDB (CloudPanel / VPS)
+                        @elseif ($mysqlHostingType === 'rds')
+                            Amazon RDS Cloud Database
+                        @elseif ($mysqlHostingType === 'remote')
+                            Remote MySQL Server
+                        @else
+                            Custom Database Configuration
+                        @endif
+                    </span>
+                </div>
+                <div>
                     <span class="text-text-muted text-[11px] block">Server Host &amp; Port</span>
                     <span class="font-mono font-bold text-text-primary">{{ $mysqlHost }}:{{ $mysqlPort }}</span>
                 </div>
@@ -42,9 +56,9 @@
                     <span class="text-text-muted text-[11px] block">Username</span>
                     <span class="font-mono font-bold text-text-primary">{{ $mysqlUsername }}</span>
                 </div>
-                <div>
-                    <span class="text-text-muted text-[11px] block">Password</span>
-                    <span class="font-mono text-text-primary">{{ $mysqlPassword ? '••••••••••••' : '(None)' }}</span>
+                <div class="sm:col-span-2">
+                    <span class="text-text-muted text-[11px] block">Password Security</span>
+                    <span class="font-mono text-text-primary">{{ $mysqlPassword ? '•••••••••••• (Encrypted in memory)' : '(No password configured)' }}</span>
                 </div>
             @endif
         </div>
@@ -80,18 +94,29 @@
                 <div class="flex items-start gap-2.5">
                     @if ($testResult['ok'] ?? false)
                         <svg class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        <div>
-                            <span class="font-bold block text-sm mb-0.5">Connection Verified</span>
-                            <span>{{ $testResult['message'] ?? 'Successfully connected to database.' }}</span>
-                            @if (! empty($testResult['server_version']))
-                                <span class="block mt-1 font-mono text-[11px] text-emerald-700 dark:text-emerald-300">Server Version: {{ $testResult['server_version'] }}</span>
-                            @endif
+                        <div class="space-y-1">
+                            <span class="font-bold block text-sm text-emerald-900 dark:text-emerald-100">Connection Verified</span>
+                            <span class="block text-emerald-800 dark:text-emerald-200">{{ $testResult['message'] ?? 'Successfully connected to database.' }}</span>
+                            <div class="flex items-center gap-3 pt-1 text-[11px] font-mono text-emerald-700 dark:text-emerald-300 flex-wrap">
+                                @if (! empty($testResult['engine']))
+                                    <span>Engine: <strong>{{ $testResult['engine'] }}</strong></span>
+                                @endif
+                                @if (! empty($testResult['version']))
+                                    <span>Version: <strong>{{ $testResult['version'] }}</strong></span>
+                                @elseif (! empty($testResult['server_version']))
+                                    <span>Version: <strong>{{ $testResult['server_version'] }}</strong></span>
+                                @endif
+                                @if (! empty($testResult['innodb']))
+                                    <span>Storage: <strong>InnoDB (utf8mb4)</strong></span>
+                                @endif
+                            </div>
                         </div>
                     @else
                         <svg class="w-5 h-5 text-rose-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                         <div>
-                            <span class="font-bold block text-sm mb-0.5">Connection Failed</span>
-                            <span>{{ $testResult['message'] ?? 'Unable to establish database connection.' }}</span>
+                            <span class="font-bold block text-sm mb-0.5 text-rose-900 dark:text-rose-100">Connection Failed</span>
+                            <span class="text-rose-800 dark:text-rose-200">{{ $testResult['message'] ?? 'Unable to establish database connection.' }}</span>
+                            <span class="block text-[11px] text-rose-600 dark:text-rose-300 mt-1">Please verify host address, port, database existence, and user credentials.</span>
                         </div>
                     @endif
                 </div>

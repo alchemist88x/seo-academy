@@ -117,8 +117,8 @@ class LivewireInstallationWizardTest extends TestCase
         $component->call('proceedFromDependencies')
             ->assertSet('step', 4)
             ->assertSee('Step 4 — Database Selection')
-            ->assertSee('SQLite 3')
-            ->assertSee('MySQL 8.4+ InnoDB');
+            ->assertSee('SQLite')
+            ->assertSee('MySQL / MariaDB');
 
         // Step 4: Switch driver and proceed
         $component->call('selectDriver', 'sqlite')
@@ -226,8 +226,8 @@ class LivewireInstallationWizardTest extends TestCase
             ->call('proceedFromDependencies')
             ->assertSet('step', 4)
             ->assertSet('driver', 'sqlite')
-            ->assertSee('SQLite 3')
-            ->assertSee('MySQL 8.4+ InnoDB');
+            ->assertSee('SQLite')
+            ->assertSee('MySQL / MariaDB');
 
         // Select MySQL
         $component->call('selectDriver', 'mysql')
@@ -272,7 +272,7 @@ class LivewireInstallationWizardTest extends TestCase
         // Toggle to MySQL on Step 5
         $component->call('selectDriver', 'mysql')
             ->assertSet('step', 5)
-            ->assertSee('MySQL Connection Credentials')
+            ->assertSee('Database Hosting & Connection Credentials')
             ->assertSee('Database Server Host');
 
         // Toggle back to SQLite on Step 5
@@ -280,5 +280,135 @@ class LivewireInstallationWizardTest extends TestCase
             ->assertSet('step', 5)
             ->assertSee('SQLite Database Configuration')
             ->assertDontSee('Database Server Host');
+    }
+
+    public function test_mysql_hosting_types_and_cloudpanel_guide(): void
+    {
+        $component = Livewire::test(InstallationWizard::class)
+            ->call('startInstallation')
+            ->call('proceedFromRequirements')
+            ->call('proceedFromDependencies')
+            ->call('selectDriver', 'mysql')
+            ->call('proceedFromDatabaseSelection')
+            ->assertSet('step', 5)
+            ->assertSet('mysqlHostingType', 'local')
+            ->assertSee('CloudPanel & Local VPS Setup Guide')
+            ->assertSet('mysqlHost', '127.0.0.1')
+            ->assertSet('mysqlPort', '3306');
+
+        // Select Amazon RDS
+        $component->call('selectHostingType', 'rds')
+            ->assertSet('mysqlHostingType', 'rds')
+            ->assertDontSee('CloudPanel & Local VPS Setup Guide')
+            ->assertSet('mysqlPort', '3306');
+
+        // Select Remote MySQL
+        $component->call('selectHostingType', 'remote')
+            ->assertSet('mysqlHostingType', 'remote')
+            ->assertSet('mysqlPort', '3306');
+
+        // Select Custom
+        $component->call('selectHostingType', 'custom')
+            ->assertSet('mysqlHostingType', 'custom');
+
+        // Switch back to Local and verify CloudPanel guide returns
+        $component->call('selectHostingType', 'local')
+            ->assertSet('mysqlHostingType', 'local')
+            ->assertSee('CloudPanel & Local VPS Setup Guide')
+            ->assertSet('mysqlHost', '127.0.0.1');
+    }
+
+    public function test_changing_credentials_invalidates_connection_verification(): void
+    {
+        $component = Livewire::test(InstallationWizard::class)
+            ->call('startInstallation')
+            ->call('proceedFromRequirements')
+            ->call('proceedFromDependencies')
+            ->call('selectDriver', 'sqlite')
+            ->call('proceedFromDatabaseSelection')
+            ->set('sqlitePath', $this->tempSqlitePath)
+            ->call('saveDatabaseConfiguration')
+            ->assertSet('step', 6)
+            ->call('testConnection')
+            ->assertSet('connectionVerified', true);
+
+        // Go back to Step 5 and modify sqlite path
+        $component->call('previousStep')
+            ->assertSet('step', 5)
+            ->set('sqlitePath', $this->tempSqlitePath.'.modified');
+
+        // Verify connection status is invalidated
+        $this->assertFalse($component->get('connectionVerified'));
+        $this->assertNull($component->get('testResult'));
+    }
+
+    public function test_mysql_live_connection_and_compatibility_detection(): void
+    {
+        $component = Livewire::test(InstallationWizard::class)
+            ->call('startInstallation')
+            ->call('proceedFromRequirements')
+            ->call('proceedFromDependencies')
+            ->call('selectDriver', 'mysql')
+            ->call('proceedFromDatabaseSelection')
+            ->set('mysqlHost', '127.0.0.1')
+            ->set('mysqlPort', '3306')
+            ->set('mysqlDatabase', 'seo_academy_test')
+            ->set('mysqlUsername', 'root')
+            ->set('mysqlPassword', '')
+            ->call('saveDatabaseConfiguration')
+            ->assertSet('step', 6)
+            ->call('testConnection')
+            ->assertSet('connectionVerified', true);
+
+        $result = $component->get('testResult');
+        $this->assertTrue($result['ok']);
+        $this->assertSame('mysql', $result['driver']);
+        $this->assertContains($result['engine'], ['MySQL', 'MariaDB']);
+        $this->assertTrue($result['innodb']);
+        $this->assertNotEmpty($result['version']);
+    }
+
+    public function test_mysql_incorrect_credentials_and_nonexistent_database(): void
+    {
+        $component = Livewire::test(InstallationWizard::class)
+            ->call('startInstallation')
+            ->call('proceedFromRequirements')
+            ->call('proceedFromDependencies')
+            ->call('selectDriver', 'mysql')
+            ->call('proceedFromDatabaseSelection')
+            ->set('mysqlHost', '127.0.0.1')
+            ->set('mysqlPort', '3306')
+            ->set('mysqlDatabase', 'nonexistent_database_'.uniqid())
+            ->set('mysqlUsername', 'invalid_user_'.uniqid())
+            ->set('mysqlPassword', 'wrong_pass')
+            ->call('saveDatabaseConfiguration')
+            ->assertSet('step', 5) // Stays on step 5 because connection test fails
+            ->assertSet('connectionVerified', false);
+
+        $error = $component->get('generalError');
+        $this->assertNotEmpty($error);
+        $this->assertStringNotContainsString('wrong_pass', $error);
+    }
+
+    public function test_mysql_unreachable_host_returns_clean_error(): void
+    {
+        $component = Livewire::test(InstallationWizard::class)
+            ->call('startInstallation')
+            ->call('proceedFromRequirements')
+            ->call('proceedFromDependencies')
+            ->call('selectDriver', 'mysql')
+            ->call('proceedFromDatabaseSelection')
+            ->set('mysqlHost', '192.0.2.1') // reserved TEST-NET unreachable IP
+            ->set('mysqlPort', '3306')
+            ->set('mysqlDatabase', 'seo_academy')
+            ->set('mysqlUsername', 'dbuser')
+            ->set('mysqlPassword', 'secret')
+            ->call('saveDatabaseConfiguration')
+            ->assertSet('step', 5) // Stays on step 5 because connection fails
+            ->assertSet('connectionVerified', false);
+
+        $error = $component->get('generalError');
+        $this->assertNotEmpty($error);
+        $this->assertStringNotContainsString('secret', $error);
     }
 }
