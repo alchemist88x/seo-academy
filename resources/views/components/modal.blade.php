@@ -31,6 +31,11 @@
             this.$watch('open', value => {
                 if (value) {
                     document.body.classList.add('overflow-hidden');
+                    this.$nextTick(() => {
+                        if (this.$refs.modalBody) {
+                            this.$refs.modalBody.scrollTop = 0;
+                        }
+                    });
                 } else {
                     document.body.classList.remove('overflow-hidden');
                 }
@@ -84,7 +89,7 @@
             </div>
         @endif
 
-        <div class="modal-body flex-1 overflow-y-auto overscroll-contain min-h-0 p-5 text-sm text-text-secondary">
+        <div x-ref="modalBody" class="modal-body flex-1 overflow-y-auto overscroll-contain min-h-0 p-5 text-sm text-text-secondary">
             {{ $slot }}
         </div>
 

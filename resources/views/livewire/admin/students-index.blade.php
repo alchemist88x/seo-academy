@@ -254,7 +254,7 @@
         name="student-form-modal"
         :title="$editingStudentId ? 'Edit Student Profile' : 'Add New Student'"
         :description="$editingStudentId ? 'Update student account details, proficiency tier, and enrollment status.' : 'Register a new student account with course enrollment and proficiency classification.'"
-        maxWidth="lg"
+        maxWidth="xl"
     >
         <form id="student-form" wire:submit="saveStudent" class="space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
