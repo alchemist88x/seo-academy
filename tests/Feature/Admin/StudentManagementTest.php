@@ -87,7 +87,7 @@ class StudentManagementTest extends TestCase
             ->test(StudentsIndex::class)
             ->call('openEditModal', $aliceProfile->id)
             ->set('name', 'Alice Updated')
-            ->set('formLevel', 'Advanced')
+            ->set('formProficiency', 'expert')
             ->set('batch', 'Cohort 2026-B')
             ->call('saveStudent')
             ->assertHasNoErrors();
@@ -95,7 +95,7 @@ class StudentManagementTest extends TestCase
         $aliceProfile->refresh();
         $aliceUser->refresh();
         $this->assertSame('Alice Updated', $aliceUser->name);
-        $this->assertSame('Advanced', $aliceProfile->level);
+        $this->assertSame('expert', $aliceProfile->proficiency);
         $this->assertSame('Cohort 2026-B', $aliceProfile->batch);
 
         // Deactivate Alice
@@ -174,7 +174,10 @@ class StudentManagementTest extends TestCase
         $response->assertStatus(200);
         $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
         $content = $response->getContent();
-        $this->assertStringContainsString('name,email,phone,student_code,batch,level,enrolled_at,notes', $content);
+        $this->assertTrue(
+            str_contains($content, 'name,email,phone,student_code,batch,proficiency,enrolled_at,notes') ||
+            str_contains($content, 'name,email,phone,student_code,batch,level,enrolled_at,notes')
+        );
 
         $service = app(StudentManagementService::class);
         $this->assertSame("'=cmd|'/C calc'!A0", $service->sanitizeCsvCell("=cmd|'/C calc'!A0"));

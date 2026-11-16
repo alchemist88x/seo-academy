@@ -3,16 +3,19 @@
 namespace App\Livewire\Admin;
 
 use App\Domain\Academies\Models\Academy;
+use App\Domain\Courses\Models\Course;
 use App\Domain\Students\Models\StudentProfile;
 use App\Domain\Students\Services\StudentManagementService;
 use App\Domain\Tenants\Services\TenantContext;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Livewire\WithPagination;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 #[Layout('layouts.app')]
 #[Title('Students')]
@@ -21,11 +24,20 @@ class StudentsIndex extends Component
     use WithFileUploads;
     use WithPagination;
 
+    // Filters
     public string $search = '';
 
     public string $status = '';
 
-    public string $level = '';
+    public string $proficiency = '';
+
+    public string $level = ''; // Legacy alias for proficiency
+
+    public string $batch = '';
+
+    public string $courseId = '';
+
+    public int $perPage = 15;
 
     // Create / Edit modal state
     public ?string $editingStudentId = null;
@@ -44,9 +56,11 @@ class StudentsIndex extends Component
 
     public string $student_code = '';
 
-    public string $batch = '';
+    public string $batch_input = '';
 
-    public string $formLevel = 'Beginner';
+    public string $formProficiency = StudentProfile::PROFICIENCY_BEGINNER;
+
+    public string $formLevel = 'Beginner'; // Legacy alias
 
     public string $enrolled_at = '';
 
@@ -57,8 +71,15 @@ class StudentsIndex extends Component
     // View modal state
     public ?StudentProfile $viewingStudent = null;
 
+    // Suspend confirmation modal state
+    public ?string $confirmingSuspendId = null;
+
+    public ?StudentProfile $confirmingSuspendProfile = null;
+
     // CSV Import state
     public $csvFile = null;
+
+    public ?string $importToken = null;
 
     /** @var array{valid_rows?: array<int, array<string, mixed>>, error_rows?: array<int, array<string, mixed>>, summary?: array<string, int>}|null */
     public ?array $importPreview = null;
@@ -72,6 +93,7 @@ class StudentsIndex extends Component
         $this->authorize('viewAny', StudentProfile::class);
 
         $this->enrolled_at = now()->toDateString();
+        $this->formProficiency = StudentProfile::PROFICIENCY_BEGINNER;
     }
 
     public function updatedName(string $value): void
@@ -91,6 +113,28 @@ class StudentsIndex extends Component
         $this->name = trim("{$this->first_name} {$this->last_name}");
     }
 
+    public function updatedFormProficiency(string $value): void
+    {
+        $this->formLevel = ucfirst($value);
+    }
+
+    public function updatedFormLevel(string $value): void
+    {
+        $this->formProficiency = StudentProfile::normalizeProficiency($value);
+    }
+
+    public function updatedProficiency(string $value): void
+    {
+        $this->level = $value;
+        $this->resetPage();
+    }
+
+    public function updatedLevel(string $value): void
+    {
+        $this->proficiency = StudentProfile::normalizeProficiency($value);
+        $this->resetPage();
+    }
+
     public function updatingSearch(): void
     {
         $this->resetPage();
@@ -101,14 +145,25 @@ class StudentsIndex extends Component
         $this->resetPage();
     }
 
-    public function updatingLevel(): void
+    public function updatingBatch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingCourseId(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatingPerPage(): void
     {
         $this->resetPage();
     }
 
     public function resetFilters(): void
     {
-        $this->reset(['search', 'status', 'level']);
+        $this->reset(['search', 'status', 'proficiency', 'level', 'batch', 'courseId', 'perPage']);
+        $this->perPage = 15;
         $this->resetPage();
     }
 
@@ -141,8 +196,9 @@ class StudentsIndex extends Component
         $this->phone = (string) ($profile->user?->phone ?? '');
         $this->password = '';
         $this->student_code = (string) $profile->student_code;
-        $this->batch = (string) ($profile->batch ?? '');
-        $this->formLevel = (string) ($profile->level ?: 'Beginner');
+        $this->batch_input = (string) ($profile->batch ?? '');
+        $this->formProficiency = $profile->proficiency ?: StudentProfile::PROFICIENCY_BEGINNER;
+        $this->formLevel = ucfirst($this->formProficiency);
         $this->enrolled_at = $profile->enrolled_at?->toDateString() ?? '';
         $this->notes = (string) ($profile->notes ?? '');
         $this->account_status = $profile->active ? 'active' : 'suspended';
@@ -155,7 +211,11 @@ class StudentsIndex extends Component
         $academy = $this->resolveAcademy($tenantContext);
         $profile = StudentProfile::query()
             ->forAcademy($academy)
-            ->with(['user.certificates', 'enrollments.course', 'enrollments.currentGrade'])
+            ->with([
+                'user.certificates',
+                'enrollments.course.modules.lessons',
+                'enrollments.currentGrade',
+            ])
             ->withCount('enrollments')
             ->findOrFail($profileId);
 
@@ -171,7 +231,8 @@ class StudentsIndex extends Component
         $actor = Auth::user();
 
         $fullName = $this->name !== '' ? $this->name : trim("{$this->first_name} {$this->last_name}");
-
+        $proficiency = StudentProfile::normalizeProficiency($this->formProficiency ?: $this->formLevel);
+        $batch = $this->batch_input !== '' ? $this->batch_input : ($this->batch !== '' ? $this->batch : null);
         if ($this->editingStudentId !== null) {
             $profile = StudentProfile::query()
                 ->forAcademy($academy)
@@ -180,6 +241,10 @@ class StudentsIndex extends Component
 
             $this->authorize('update', $profile);
 
+            if ($this->batch !== '' && $this->batch !== (string) ($profile->batch ?? '')) {
+                $batch = $this->batch;
+            }
+
             $service->update($profile, [
                 'first_name' => $this->first_name,
                 'last_name' => $this->last_name,
@@ -187,8 +252,9 @@ class StudentsIndex extends Component
                 'email' => $this->email,
                 'phone' => $this->phone !== '' ? $this->phone : null,
                 'student_code' => $this->student_code,
-                'batch' => $this->batch !== '' ? $this->batch : null,
-                'level' => $this->formLevel,
+                'batch' => $batch,
+                'proficiency' => $proficiency,
+                'level' => ucfirst($proficiency),
                 'enrolled_at' => $this->enrolled_at !== '' ? $this->enrolled_at : null,
                 'notes' => $this->notes !== '' ? $this->notes : null,
                 'status' => $this->account_status,
@@ -206,8 +272,9 @@ class StudentsIndex extends Component
                 'email' => $this->email,
                 'phone' => $this->phone !== '' ? $this->phone : null,
                 'student_code' => $this->student_code !== '' ? $this->student_code : null,
-                'batch' => $this->batch !== '' ? $this->batch : null,
-                'level' => $this->formLevel,
+                'batch' => $batch,
+                'proficiency' => $proficiency,
+                'level' => ucfirst($proficiency),
                 'enrolled_at' => $this->enrolled_at !== '' ? $this->enrolled_at : null,
                 'notes' => $this->notes !== '' ? $this->notes : null,
                 'status' => $this->account_status,
@@ -226,6 +293,43 @@ class StudentsIndex extends Component
         $this->dispatch('close-modal', 'student-form-modal');
     }
 
+    public function promptSuspend(string $profileId, TenantContext $tenantContext): void
+    {
+        $academy = $this->resolveAcademy($tenantContext);
+        $profile = StudentProfile::query()
+            ->forAcademy($academy)
+            ->with('user')
+            ->findOrFail($profileId);
+
+        $this->authorize('update', $profile);
+
+        if ($profile->active) {
+            $this->confirmingSuspendId = $profileId;
+            $this->confirmingSuspendProfile = $profile;
+            $this->dispatch('open-modal', 'confirm-suspend-modal');
+        } else {
+            // Reactivating can happen immediately without destructive warning
+            $this->toggleActive($profileId, $tenantContext, app(StudentManagementService::class));
+        }
+    }
+
+    public function cancelSuspend(): void
+    {
+        $this->confirmingSuspendId = null;
+        $this->confirmingSuspendProfile = null;
+        $this->dispatch('close-modal', 'confirm-suspend-modal');
+    }
+
+    public function confirmSuspendAction(TenantContext $tenantContext, StudentManagementService $service): void
+    {
+        if ($this->confirmingSuspendId === null) {
+            return;
+        }
+
+        $this->toggleActive($this->confirmingSuspendId, $tenantContext, $service);
+        $this->cancelSuspend();
+    }
+
     public function toggleActive(string $profileId, TenantContext $tenantContext, StudentManagementService $service): void
     {
         $academy = $this->resolveAcademy($tenantContext);
@@ -241,7 +345,7 @@ class StudentsIndex extends Component
         $this->dispatch(
             'toast',
             type: 'success',
-            message: $updated->active ? 'Student activated.' : 'Student deactivated.',
+            message: $updated->active ? 'Student activated.' : 'Student suspended.',
         );
     }
 
@@ -252,6 +356,7 @@ class StudentsIndex extends Component
 
         $this->resetValidation();
         $this->csvFile = null;
+        $this->importToken = (string) Str::uuid();
         $this->importPreview = null;
         $this->importResult = null;
 
@@ -272,6 +377,7 @@ class StudentsIndex extends Component
         try {
             $content = (string) $this->csvFile->get();
             $this->importPreview = $service->previewCsv($academy, $content);
+            $this->importToken = (string) Str::uuid();
         } catch (ValidationException $e) {
             $this->importPreview = null;
             $this->addError('csvFile', collect($e->errors())->flatten()->first() ?? 'Unable to parse CSV file.');
@@ -290,15 +396,54 @@ class StudentsIndex extends Component
             return;
         }
 
-        $result = $service->commitCsvImport($academy, $validRows, Auth::user());
+        try {
+            $result = $service->commitCsvImport($academy, $validRows, Auth::user(), $this->importToken);
 
-        $this->importResult = [
-            'imported' => (int) ($result['imported'] ?? 0),
+            $this->importResult = [
+                'imported' => (int) ($result['imported'] ?? 0),
+            ];
+            $this->importPreview = null;
+            $this->csvFile = null;
+            $this->importToken = null;
+
+            $this->dispatch('toast', type: 'success', message: "Imported {$this->importResult['imported']} student(s).");
+        } catch (ValidationException $e) {
+            $this->addError('csvFile', collect($e->errors())->flatten()->first() ?? 'Import failed.');
+        }
+    }
+
+    public function downloadRejectedRows(StudentManagementService $service): StreamedResponse
+    {
+        $errorRows = $this->importPreview['error_rows'] ?? [];
+        if (empty($errorRows)) {
+            abort(404, 'No rejected rows found.');
+        }
+
+        $csv = $service->exportRejectedCsv($errorRows);
+
+        return response()->streamDownload(function () use ($csv): void {
+            echo chr(0xEF).chr(0xBB).chr(0xBF); // UTF-8 BOM
+            echo $csv;
+        }, 'rejected-students-'.now()->format('Y-m-d-His').'.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function exportCsv(TenantContext $tenantContext, StudentManagementService $service): StreamedResponse
+    {
+        $academy = $this->resolveAcademy($tenantContext);
+        $this->authorize('export', [StudentProfile::class, $academy]);
+
+        $filters = [
+            'search' => $this->search,
+            'status' => $this->status,
+            'proficiency' => $this->proficiency ?: $this->level,
+            'batch' => $this->batch,
+            'course_id' => $this->courseId,
         ];
-        $this->importPreview = null;
-        $this->csvFile = null;
 
-        $this->dispatch('toast', type: 'success', message: "Imported {$this->importResult['imported']} student(s).");
+        return $service->exportCsv($academy, $filters, Auth::user());
     }
 
     public function render(TenantContext $tenantContext, StudentManagementService $service)
@@ -307,20 +452,44 @@ class StudentsIndex extends Component
 
         $activeFilter = match ($this->status) {
             'active' => true,
-            'inactive' => false,
+            'suspended', 'inactive' => false,
             default => null,
         };
 
         $students = $service->listForAcademy($academy, [
             'search' => $this->search,
-            'level' => $this->level,
+            'proficiency' => $this->proficiency ?: $this->level,
+            'batch' => $this->batch,
+            'course_id' => $this->courseId,
             'active' => $activeFilter,
-        ], 15);
+        ], $this->perPage);
+
+        $availableCourses = Course::query()
+            ->forAcademy($academy)
+            ->orderBy('title')
+            ->get(['id', 'title']);
+
+        $availableBatches = StudentProfile::query()
+            ->forAcademy($academy)
+            ->whereNotNull('batch')
+            ->where('batch', '!=', '')
+            ->distinct()
+            ->pluck('batch')
+            ->sort()
+            ->values();
 
         return view('livewire.admin.students-index', [
             'academy' => $academy,
             'students' => $students,
-            'levels' => ['Beginner', 'Intermediate', 'Advanced'],
+            'availableCourses' => $availableCourses,
+            'availableBatches' => $availableBatches,
+            'proficiencies' => [
+                StudentProfile::PROFICIENCY_BEGINNER => 'Beginner',
+                StudentProfile::PROFICIENCY_INTERMEDIATE => 'Intermediate',
+                StudentProfile::PROFICIENCY_EXPERT => 'Expert',
+            ],
+            // Kept for backward compatibility
+            'levels' => ['Beginner', 'Intermediate', 'Expert'],
         ]);
     }
 
@@ -345,7 +514,8 @@ class StudentsIndex extends Component
         $this->phone = '';
         $this->password = '';
         $this->student_code = '';
-        $this->batch = '';
+        $this->batch_input = '';
+        $this->formProficiency = StudentProfile::PROFICIENCY_BEGINNER;
         $this->formLevel = 'Beginner';
         $this->enrolled_at = now()->toDateString();
         $this->notes = '';

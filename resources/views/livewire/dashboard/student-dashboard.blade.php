@@ -1,16 +1,22 @@
 <div class="space-y-6">
-    <x-page-header
-        title="Welcome back, {{ $userName }}"
-        subtitle="Track your SEO learning progress, daily streaks, and upcoming lessons."
-    >
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-border-default/60">
+        <div>
+            <div class="flex items-center gap-2.5">
+                <h1 class="text-2xl font-bold text-text-primary tracking-tight">Welcome back, {{ $userName }}</h1>
+                <x-badge :color="$proficiencyBadgeColor" size="sm">
+                    {{ $proficiencyLabel }}
+                </x-badge>
+            </div>
+            <p class="text-sm text-text-secondary mt-1">Track your SEO learning progress, daily streaks, and upcoming lessons.</p>
+        </div>
         @if ($activeEnrollments->isNotEmpty())
-            <x-slot:actions>
+            <div>
                 <a href="{{ route('student.courses.index') }}" class="btn btn-primary btn-md">
                     Continue Learning
                 </a>
-            </x-slot:actions>
+            </div>
         @endif
-    </x-page-header>
+    </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         @foreach ($stats as $stat)

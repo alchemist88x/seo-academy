@@ -352,7 +352,7 @@ class LivewireInstallationWizardTest extends TestCase
             ->call('proceedFromDatabaseSelection')
             ->set('mysqlHost', '127.0.0.1')
             ->set('mysqlPort', '3306')
-            ->set('mysqlDatabase', 'seo_academy_test')
+            ->set('mysqlDatabase', 'seo_academy_wizard_test')
             ->set('mysqlUsername', 'root')
             ->set('mysqlPassword', '')
             ->call('saveDatabaseConfiguration')

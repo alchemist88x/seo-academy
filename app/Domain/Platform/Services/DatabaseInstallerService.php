@@ -234,6 +234,7 @@ class DatabaseInstallerService
         '2026_11_16_140000_enhance_certificates_for_phase53',
         '2026_11_16_150000_add_original_enrollment_id_to_certificates_table',
         '2026_11_16_160000_encrypt_certificate_verification_codes',
+        '2026_11_17_100000_add_proficiency_to_student_profiles_table',
     ];
 
     public function __construct(

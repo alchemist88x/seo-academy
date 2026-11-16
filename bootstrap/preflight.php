@@ -16,8 +16,8 @@ $baseDir = dirname(__DIR__);
 // 1. Handle auto-creation of .env if missing and vendor exists
 function ensureEnvironmentInitialized(string $baseDir): void
 {
-    $envPath = $baseDir . DIRECTORY_SEPARATOR . '.env';
-    $examplePath = $baseDir . DIRECTORY_SEPARATOR . '.env.example';
+    $envPath = $baseDir.DIRECTORY_SEPARATOR.'.env';
+    $examplePath = $baseDir.DIRECTORY_SEPARATOR.'.env.example';
 
     if (! file_exists($envPath)) {
         if (! file_exists($examplePath)) {
@@ -38,10 +38,10 @@ function ensureEnvironmentInitialized(string $baseDir): void
         }
 
         // Generate cryptographically secure 32-byte AES key
-        $key = 'base64:' . base64_encode(random_bytes(32));
-        $newEnv = preg_replace('/^APP_KEY=.*$/m', 'APP_KEY=' . $key, $exampleContent);
-        if ($newEnv === null || strpos($newEnv, 'APP_KEY=' . $key) === false) {
-            $newEnv = "APP_KEY={$key}\n" . $exampleContent;
+        $key = 'base64:'.base64_encode(random_bytes(32));
+        $newEnv = preg_replace('/^APP_KEY=.*$/m', 'APP_KEY='.$key, $exampleContent);
+        if ($newEnv === null || strpos($newEnv, 'APP_KEY='.$key) === false) {
+            $newEnv = "APP_KEY={$key}\n".$exampleContent;
         }
 
         $written = @file_put_contents($envPath, $newEnv);
@@ -54,11 +54,11 @@ function ensureEnvironmentInitialized(string $baseDir): void
         }
 
         // Ensure default SQLite database file is pre-touched if sqlite is configured
-        $privateDir = $baseDir . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'private';
+        $privateDir = $baseDir.DIRECTORY_SEPARATOR.'storage'.DIRECTORY_SEPARATOR.'app'.DIRECTORY_SEPARATOR.'private';
         if (! is_dir($privateDir)) {
             @mkdir($privateDir, 0755, true);
         }
-        $sqliteFile = $privateDir . DIRECTORY_SEPARATOR . 'database.sqlite';
+        $sqliteFile = $privateDir.DIRECTORY_SEPARATOR.'database.sqlite';
         if (! file_exists($sqliteFile)) {
             @touch($sqliteFile);
         }
@@ -66,8 +66,8 @@ function ensureEnvironmentInitialized(string $baseDir): void
         // If .env exists but APP_KEY is empty, generate it
         $envContent = file_get_contents($envPath) ?: '';
         if (preg_match('/^APP_KEY=\s*$/m', $envContent)) {
-            $key = 'base64:' . base64_encode(random_bytes(32));
-            $envContent = preg_replace('/^APP_KEY=\s*$/m', 'APP_KEY=' . $key, $envContent);
+            $key = 'base64:'.base64_encode(random_bytes(32));
+            $envContent = preg_replace('/^APP_KEY=\s*$/m', 'APP_KEY='.$key, $envContent);
             @file_put_contents($envPath, $envContent);
         }
     }
@@ -91,7 +91,7 @@ function handleControlledComposerInstall(string $baseDir): ?string
             return 'Composer binary was not detected on this server. Please deploy the prebuilt release package containing pre-installed dependencies.';
         }
 
-        $cmd = escapeshellcmd($composerBin) . ' install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress 2>&1';
+        $cmd = escapeshellcmd($composerBin).' install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress 2>&1';
         $descriptors = [
             0 => ['pipe', 'r'],
             1 => ['pipe', 'w'],
@@ -110,12 +110,12 @@ function handleControlledComposerInstall(string $baseDir): ?string
         fclose($pipes[2]);
         $exitCode = proc_close($process);
 
-        if ($exitCode === 0 && file_exists($baseDir . '/vendor/autoload.php')) {
+        if ($exitCode === 0 && file_exists($baseDir.'/vendor/autoload.php')) {
             header('Location: /');
             exit;
         }
 
-        return 'Composer install failed (Exit code ' . $exitCode . '): ' . htmlspecialchars((string) ($output ?: $stderr));
+        return 'Composer install failed (Exit code '.$exitCode.'): '.htmlspecialchars((string) ($output ?: $stderr));
     }
 
     return null;
@@ -127,11 +127,12 @@ function findComposerBinary(): ?string
     foreach ($candidates as $bin) {
         $output = [];
         $exit = 1;
-        @exec(escapeshellcmd($bin) . ' --version 2>&1', $output, $exit);
+        @exec(escapeshellcmd($bin).' --version 2>&1', $output, $exit);
         if ($exit === 0) {
             return $bin;
         }
     }
+
     return null;
 }
 
@@ -140,7 +141,7 @@ function renderPreflightPage(string $baseDir, ?string $composerMessage = null): 
 {
     $phpVersion = PHP_VERSION;
     $phpOk = version_compare($phpVersion, '8.3.0', '>=');
-    $composerJsonExists = file_exists($baseDir . '/composer.json');
+    $composerJsonExists = file_exists($baseDir.'/composer.json');
     $composerBinary = findComposerBinary();
 
     $requiredExtensions = [
@@ -313,12 +314,12 @@ function renderPreflightPage(string $baseDir, ?string $composerMessage = null): 
         <h1>Application Dependencies Required</h1>
         <p class="subtitle">SEO Academy is ready to install, but production PHP dependencies (<code>vendor/</code>) are not yet present on this server.</p>
 
-        <?php if ($composerMessage): ?>
+        <?php if ($composerMessage) { ?>
             <div class="alert alert-error">
                 <strong>Dependency Installation Notice:</strong><br>
                 <?= $composerMessage; ?>
             </div>
-        <?php endif; ?>
+        <?php } ?>
 
         <div class="card">
             <div class="card-title">
@@ -332,25 +333,25 @@ function renderPreflightPage(string $baseDir, ?string $composerMessage = null): 
             </p>
         </div>
 
-        <?php if (! empty($missingExts)): ?>
+        <?php if (! empty($missingExts)) { ?>
             <div class="card">
                 <div class="card-title">
                     <span>Missing Mandatory PHP Extensions</span>
                     <span class="status-pill pill-fail"><?= count($missingExts); ?> Missing</span>
                 </div>
                 <ul class="list">
-                    <?php foreach ($missingExts as $ext => $desc): ?>
+                    <?php foreach ($missingExts as $ext => $desc) { ?>
                         <li>
                             <span><code>ext-<?= htmlspecialchars($ext); ?></code> &mdash; <?= htmlspecialchars($desc); ?></span>
                             <span style="color: var(--danger); font-weight: 600;">Disabled</span>
                         </li>
-                    <?php endforeach; ?>
+                    <?php } ?>
                 </ul>
                 <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">
                     Please enable the missing PHP extensions in your hosting control panel (cPanel &gt; Select PHP Version &gt; Extensions, or php.ini).
                 </p>
             </div>
-        <?php endif; ?>
+        <?php } ?>
 
         <div class="card">
             <div class="card-title">
@@ -369,15 +370,15 @@ function renderPreflightPage(string $baseDir, ?string $composerMessage = null): 
             </div>
 
             <div class="action-group">
-                <?php if ($composerBinary !== null): ?>
+                <?php if ($composerBinary !== null) { ?>
                     <form method="POST" action="?action=install-dependencies" style="display:inline;">
                         <button type="submit" class="btn">Install Dependencies via Server Composer</button>
                     </form>
-                <?php else: ?>
+                <?php } else { ?>
                     <span style="font-size: 0.85rem; color: var(--warning); display: flex; align-items: center;">
                         &bull; Composer CLI was not detected on this host. Please use Option A.
                     </span>
-                <?php endif; ?>
+                <?php } ?>
                 <a href="/" class="btn btn-outline">Re-check Dependencies</a>
             </div>
         </div>
@@ -423,7 +424,7 @@ function renderPreflightError(string $title, string $message): void
 // 4. Main pre-flight execution
 $composerMessage = handleControlledComposerInstall($baseDir);
 
-if (! file_exists($baseDir . '/vendor/autoload.php')) {
+if (! file_exists($baseDir.'/vendor/autoload.php')) {
     renderPreflightPage($baseDir, $composerMessage);
     exit;
 }

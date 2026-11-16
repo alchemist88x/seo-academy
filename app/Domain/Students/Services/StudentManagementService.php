@@ -9,12 +9,14 @@ use App\Domain\Students\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StudentManagementService
 {
@@ -24,17 +26,19 @@ class StudentManagementService
     {
         $query = StudentProfile::query()
             ->forAcademy($academy)
-            ->with(['user', 'academy'])
+            ->with(['user', 'academy', 'enrollments.course'])
             ->withCount('enrollments');
 
         $search = trim((string) ($filters['search'] ?? ''));
         if ($search !== '') {
             $query->where(function (Builder $q) use ($search): void {
                 $q->where('student_code', 'like', "%{$search}%")
+                    ->orWhere('id', 'like', "%{$search}%")
                     ->orWhere('batch', 'like', "%{$search}%")
                     ->orWhereHas('user', function (Builder $userQuery) use ($search): void {
                         $userQuery->where('name', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%");
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('phone', 'like', "%{$search}%");
                     });
             });
         }
@@ -44,9 +48,19 @@ class StudentManagementService
             $query->where('batch', $batch);
         }
 
-        $level = trim((string) ($filters['level'] ?? ''));
-        if ($level !== '') {
-            $query->where('level', $level);
+        // Support both 'proficiency' and legacy 'level'
+        $proficiency = trim((string) ($filters['proficiency'] ?? $filters['level'] ?? ''));
+        if ($proficiency !== '') {
+            $normalized = StudentProfile::normalizeProficiency($proficiency);
+            $query->forProficiency($normalized);
+        }
+
+        // Filter by course enrollment
+        $courseId = trim((string) ($filters['course_id'] ?? ''));
+        if ($courseId !== '') {
+            $query->whereHas('enrollments', function (Builder $enrollmentQuery) use ($courseId): void {
+                $enrollmentQuery->where('course_id', $courseId);
+            });
         }
 
         if (array_key_exists('active', $filters) && $filters['active'] !== '' && $filters['active'] !== null) {
@@ -54,7 +68,15 @@ class StudentManagementService
             if ($active !== null) {
                 $query->where('active', $active);
             }
+        } elseif (! empty($filters['status'])) {
+            if ($filters['status'] === 'active') {
+                $query->where('active', true);
+            } elseif (in_array($filters['status'], ['suspended', 'inactive'], true)) {
+                $query->where('active', false);
+            }
         }
+
+        $perPage = max(5, min(100, $perPage));
 
         return $query->latest()->paginate($perPage);
     }
@@ -67,6 +89,13 @@ class StudentManagementService
             $data['name'] = trim("{$firstName} {$lastName}");
         }
 
+        // Normalize proficiency from proficiency or level
+        if (! isset($data['proficiency']) && isset($data['level'])) {
+            $data['proficiency'] = StudentProfile::normalizeProficiency($data['level']);
+        } elseif (isset($data['proficiency'])) {
+            $data['proficiency'] = strtolower(trim((string) $data['proficiency']));
+        }
+
         $validated = Validator::make($data, [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255'],
@@ -74,6 +103,7 @@ class StudentManagementService
             'password' => ['nullable', 'string', 'min:8'],
             'student_code' => ['nullable', 'string', 'max:100'],
             'batch' => ['nullable', 'string', 'max:255'],
+            'proficiency' => ['nullable', 'string', Rule::in(StudentProfile::PROFICIENCIES)],
             'level' => ['nullable', 'string', 'max:100'],
             'enrolled_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:5000'],
@@ -83,8 +113,9 @@ class StudentManagementService
         $email = Str::lower(trim($validated['email']));
         $status = ($validated['status'] ?? 'active') === 'suspended' ? 'suspended' : 'active';
         $isActive = $status === 'active';
+        $proficiency = $validated['proficiency'] ?? StudentProfile::normalizeProficiency($validated['level'] ?? null);
 
-        return DB::transaction(function () use ($academy, $validated, $email, $status, $isActive, $actor): StudentProfile {
+        return DB::transaction(function () use ($academy, $validated, $email, $status, $isActive, $proficiency, $actor): StudentProfile {
             $user = User::where('email', $email)->first();
 
             if ($user === null) {
@@ -164,7 +195,8 @@ class StudentManagementService
                 'student_code' => $studentCode,
                 'batch' => $validated['batch'] ?? null,
                 'enrolled_at' => $validated['enrolled_at'] ?? now()->toDateString(),
-                'level' => $validated['level'] ?? 'Beginner',
+                'proficiency' => $proficiency,
+                'level' => ucfirst($proficiency),
                 'active' => $isActive,
                 'notes' => $validated['notes'] ?? null,
             ]);
@@ -179,6 +211,7 @@ class StudentManagementService
                     'student_user_id' => $user->getKey(),
                     'email' => $user->email,
                     'student_code' => $profile->student_code,
+                    'proficiency' => $proficiency,
                 ],
             );
 
@@ -192,6 +225,13 @@ class StudentManagementService
             $firstName = trim((string) ($data['first_name'] ?? ''));
             $lastName = trim((string) ($data['last_name'] ?? ''));
             $data['name'] = trim("{$firstName} {$lastName}") ?: ($profile->user?->name ?? '');
+        }
+
+        // Normalize proficiency from proficiency or level
+        if (isset($data['proficiency'])) {
+            $data['proficiency'] = strtolower(trim((string) $data['proficiency']));
+        } elseif (isset($data['level'])) {
+            $data['proficiency'] = StudentProfile::normalizeProficiency($data['level']);
         }
 
         $validated = Validator::make($data, [
@@ -208,6 +248,7 @@ class StudentManagementService
             'password' => ['nullable', 'string', 'min:8'],
             'student_code' => ['sometimes', 'required', 'string', 'max:100'],
             'batch' => ['nullable', 'string', 'max:255'],
+            'proficiency' => ['sometimes', 'required', 'string', Rule::in(StudentProfile::PROFICIENCIES)],
             'level' => ['sometimes', 'required', 'string', 'max:100'],
             'enrolled_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:5000'],
@@ -269,8 +310,13 @@ class StudentManagementService
 
             $profileUpdates = array_intersect_key(
                 $validated,
-                array_flip(['student_code', 'batch', 'level', 'enrolled_at', 'notes']),
+                array_flip(['student_code', 'batch', 'proficiency', 'level', 'enrolled_at', 'notes']),
             );
+
+            if (isset($profileUpdates['proficiency'])) {
+                $profileUpdates['level'] = ucfirst($profileUpdates['proficiency']);
+            }
+
             if (array_key_exists('notes', $data) && ! isset($profileUpdates['notes'])) {
                 $profileUpdates['notes'] = $data['notes'] !== '' ? $data['notes'] : null;
             }
@@ -335,7 +381,21 @@ class StudentManagementService
      */
     public function csvTemplateHeaders(): array
     {
-        return ['name', 'email', 'phone', 'student_code', 'batch', 'level', 'enrolled_at', 'notes'];
+        return ['name', 'email', 'phone', 'student_code', 'batch', 'proficiency', 'enrolled_at', 'notes'];
+    }
+
+    /**
+     * @return array<int, array<int, string>>
+     */
+    public function csvTemplateSampleRows(): array
+    {
+        $today = now()->toDateString();
+
+        return [
+            ['Jane Beginner', 'jane.beginner@example.com', '+15550101', '', 'Cohort 2026-A', 'beginner', $today, 'New cohort student'],
+            ['Mark Intermediate', 'mark.intermediate@example.com', '+15550102', '', 'Cohort 2026-A', 'intermediate', $today, 'Has foundational SEO knowledge'],
+            ['Sarah Expert', 'sarah.expert@example.com', '+15550103', '', 'Cohort 2026-B', 'expert', $today, 'Technical auditor specialist'],
+        ];
     }
 
     public function sanitizeCsvCell(string $value): string
@@ -407,9 +467,29 @@ class StudentManagementService
             $email = Str::lower(trim((string) ($assoc['email'] ?? '')));
             $assoc['email'] = $email;
 
-            if (($assoc['level'] ?? '') === '') {
-                $assoc['level'] = 'Beginner';
+            // Normalize proficiency or level
+            $rawProficiency = trim((string) ($assoc['proficiency'] ?? $assoc['level'] ?? ''));
+            $normalizedProficiency = null;
+            $invalidProficiency = false;
+
+            if ($rawProficiency !== '') {
+                $cleanProficiency = strtolower($rawProficiency);
+                if (in_array($cleanProficiency, StudentProfile::PROFICIENCIES, true)) {
+                    $normalizedProficiency = $cleanProficiency;
+                } elseif (str_contains($cleanProficiency, 'inter')) {
+                    $normalizedProficiency = StudentProfile::PROFICIENCY_INTERMEDIATE;
+                } elseif (str_contains($cleanProficiency, 'adv') || str_contains($cleanProficiency, 'exp')) {
+                    $normalizedProficiency = StudentProfile::PROFICIENCY_EXPERT;
+                } elseif (str_contains($cleanProficiency, 'beg')) {
+                    $normalizedProficiency = StudentProfile::PROFICIENCY_BEGINNER;
+                } else {
+                    $invalidProficiency = true;
+                }
+            } else {
+                $normalizedProficiency = StudentProfile::PROFICIENCY_BEGINNER;
             }
+
+            $assoc['proficiency'] = $normalizedProficiency ?? $rawProficiency;
 
             $validator = Validator::make($assoc, [
                 'name' => ['required', 'string', 'max:255'],
@@ -417,12 +497,15 @@ class StudentManagementService
                 'phone' => ['nullable', 'string', 'max:50'],
                 'student_code' => ['nullable', 'string', 'max:100'],
                 'batch' => ['nullable', 'string', 'max:255'],
-                'level' => ['nullable', 'string', 'max:100'],
                 'enrolled_at' => ['nullable', 'date'],
                 'notes' => ['nullable', 'string', 'max:5000'],
             ]);
 
             $errors = $validator->errors()->all();
+
+            if ($invalidProficiency) {
+                $errors[] = "Invalid proficiency '{$rawProficiency}'. Accepted values: beginner, intermediate, expert.";
+            }
 
             if ($email !== '' && isset($seenEmails[$email])) {
                 $errors[] = "Duplicate email '{$email}' in CSV file.";
@@ -465,7 +548,8 @@ class StudentManagementService
                     'phone' => ($assoc['phone'] ?? '') !== '' ? $assoc['phone'] : null,
                     'student_code' => $code !== '' ? $code : null,
                     'batch' => ($assoc['batch'] ?? '') !== '' ? $assoc['batch'] : null,
-                    'level' => $assoc['level'] ?: 'Beginner',
+                    'proficiency' => $normalizedProficiency ?: StudentProfile::PROFICIENCY_BEGINNER,
+                    'level' => ucfirst($normalizedProficiency ?: StudentProfile::PROFICIENCY_BEGINNER),
                     'enrolled_at' => ($assoc['enrolled_at'] ?? '') !== '' ? $assoc['enrolled_at'] : null,
                     'notes' => ($assoc['notes'] ?? '') !== '' ? $assoc['notes'] : null,
                 ],
@@ -483,30 +567,187 @@ class StudentManagementService
         ];
     }
 
-    public function commitCsvImport(Academy $academy, array $validRows, User $actor): array
+    public function commitCsvImport(Academy $academy, array $validRows, User $actor, ?string $importToken = null): array
     {
-        return DB::transaction(function () use ($academy, $validRows, $actor): array {
-            $profiles = [];
+        // Prevent duplicate processing on repeated submission
+        $lockKey = 'csv_import_lock_'.($importToken ?: md5(json_encode($validRows)));
+        if (! Cache::add($lockKey, true, 30)) {
+            throw ValidationException::withMessages([
+                'csv' => 'This import is already being processed or was recently submitted. Please check the student list.',
+            ]);
+        }
 
-            foreach ($validRows as $row) {
-                $rowData = is_array($row) && array_key_exists('data', $row) ? $row['data'] : $row;
-                $profiles[] = $this->createOrAttach($academy, $rowData, $actor);
+        try {
+            return DB::transaction(function () use ($academy, $validRows, $actor): array {
+                $profiles = [];
+
+                foreach ($validRows as $row) {
+                    $rowData = is_array($row) && array_key_exists('data', $row) ? $row['data'] : $row;
+                    $profiles[] = $this->createOrAttach($academy, $rowData, $actor);
+                }
+
+                $this->recordAudit(
+                    $academy,
+                    $actor,
+                    'student.csv_imported',
+                    Academy::class,
+                    $academy->getKey(),
+                    ['imported_count' => count($profiles)],
+                );
+
+                return [
+                    'imported' => count($profiles),
+                    'profiles' => $profiles,
+                ];
+            });
+        } finally {
+            Cache::forget($lockKey);
+        }
+    }
+
+    /**
+     * Generate downloadable CSV of rejected rows with error explanations.
+     */
+    public function exportRejectedCsv(array $errorRows): string
+    {
+        $handle = fopen('php://temp', 'r+');
+        fputcsv($handle, ['Row Number', 'Name', 'Email', 'Phone', 'Student Code', 'Batch', 'Proficiency', 'Enrolled At', 'Notes', 'Rejection Reasons']);
+
+        foreach ($errorRows as $row) {
+            $raw = $row['raw'] ?? [];
+            fputcsv($handle, [
+                $row['row_number'] ?? '',
+                $this->sanitizeCsvCell($raw['name'] ?? ''),
+                $this->sanitizeCsvCell($raw['email'] ?? ''),
+                $this->sanitizeCsvCell($raw['phone'] ?? ''),
+                $this->sanitizeCsvCell($raw['student_code'] ?? ''),
+                $this->sanitizeCsvCell($raw['batch'] ?? ''),
+                $this->sanitizeCsvCell($raw['proficiency'] ?? ($raw['level'] ?? '')),
+                $this->sanitizeCsvCell($raw['enrolled_at'] ?? ''),
+                $this->sanitizeCsvCell($raw['notes'] ?? ''),
+                implode(' | ', $row['errors'] ?? []),
+            ]);
+        }
+
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+
+        return $csv ?: '';
+    }
+
+    /**
+     * Export filtered students as streamed CSV with formula-injection protection and UTF-8 encoding.
+     */
+    public function exportCsv(Academy $academy, array $filters = [], ?User $actor = null): StreamedResponse
+    {
+        $query = StudentProfile::query()
+            ->forAcademy($academy)
+            ->with(['user', 'academy', 'enrollments.course'])
+            ->withCount('enrollments');
+
+        $search = trim((string) ($filters['search'] ?? ''));
+        if ($search !== '') {
+            $query->where(function (Builder $q) use ($search): void {
+                $q->where('student_code', 'like', "%{$search}%")
+                    ->orWhere('id', 'like', "%{$search}%")
+                    ->orWhere('batch', 'like', "%{$search}%")
+                    ->orWhereHas('user', function (Builder $userQuery) use ($search): void {
+                        $userQuery->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('phone', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $batch = trim((string) ($filters['batch'] ?? ''));
+        if ($batch !== '') {
+            $query->where('batch', $batch);
+        }
+
+        $proficiency = trim((string) ($filters['proficiency'] ?? $filters['level'] ?? ''));
+        if ($proficiency !== '') {
+            $normalized = StudentProfile::normalizeProficiency($proficiency);
+            $query->forProficiency($normalized);
+        }
+
+        $courseId = trim((string) ($filters['course_id'] ?? ''));
+        if ($courseId !== '') {
+            $query->whereHas('enrollments', function (Builder $enrollmentQuery) use ($courseId): void {
+                $enrollmentQuery->where('course_id', $courseId);
+            });
+        }
+
+        if (array_key_exists('active', $filters) && $filters['active'] !== '' && $filters['active'] !== null) {
+            $active = filter_var($filters['active'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($active !== null) {
+                $query->where('active', $active);
             }
+        } elseif (! empty($filters['status'])) {
+            if ($filters['status'] === 'active') {
+                $query->where('active', true);
+            } elseif (in_array($filters['status'], ['suspended', 'inactive'], true)) {
+                $query->where('active', false);
+            }
+        }
 
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="students-export-'.now()->format('Y-m-d-His').'.csv"',
+            'Pragma' => 'no-cache',
+            'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires' => '0',
+            'X-Content-Type-Options' => 'nosniff',
+        ];
+
+        if ($actor !== null) {
             $this->recordAudit(
                 $academy,
                 $actor,
-                'student.csv_imported',
-                Academy::class,
-                $academy->getKey(),
-                ['imported_count' => count($profiles)],
+                'students.exported_csv',
+                StudentProfile::class,
+                null,
+                ['filters' => $filters],
             );
+        }
 
-            return [
-                'imported' => count($profiles),
-                'profiles' => $profiles,
-            ];
-        });
+        return response()->stream(function () use ($query): void {
+            $output = fopen('php://output', 'w');
+            // Write UTF-8 BOM
+            fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+
+            fputcsv($output, [
+                'Student Code',
+                'Full Name',
+                'Email Address',
+                'Phone Number',
+                'Proficiency Level',
+                'Batch / Cohort',
+                'Account Status',
+                'Enrolled Courses Count',
+                'Enrolled Date',
+                'Internal Notes',
+            ]);
+
+            $query->orderBy('created_at', 'desc')->chunk(100, function ($profiles) use ($output): void {
+                foreach ($profiles as $profile) {
+                    fputcsv($output, [
+                        $this->sanitizeCsvCell((string) $profile->student_code),
+                        $this->sanitizeCsvCell((string) ($profile->user?->name ?? '')),
+                        $this->sanitizeCsvCell((string) ($profile->user?->email ?? '')),
+                        $this->sanitizeCsvCell((string) ($profile->user?->phone ?? '')),
+                        $this->sanitizeCsvCell((string) $profile->proficiency_label),
+                        $this->sanitizeCsvCell((string) ($profile->batch ?? '')),
+                        $profile->active ? 'Active' : 'Suspended',
+                        (string) ($profile->enrollments_count ?? 0),
+                        (string) ($profile->enrolled_at?->toDateString() ?? ''),
+                        $this->sanitizeCsvCell((string) ($profile->notes ?? '')),
+                    ]);
+                }
+            });
+
+            fclose($output);
+        }, 200, $headers);
     }
 
     private function generateStudentCode(Academy $academy): string

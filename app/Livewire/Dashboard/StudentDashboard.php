@@ -78,6 +78,8 @@ class StudentDashboard extends Component
 
         return view('livewire.dashboard.student-dashboard', [
             'userName' => $user?->name ?? 'Student',
+            'proficiencyLabel' => $studentProfile?->proficiency_label ?? 'Beginner',
+            'proficiencyBadgeColor' => $studentProfile?->proficiency_badge_color ?? 'blue',
             'stats' => $stats,
             'activeEnrollments' => $activeEnrollments,
             'hasAnyEnrollments' => $totalEnrollmentsCount > 0,

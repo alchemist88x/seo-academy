@@ -162,20 +162,15 @@ Route::middleware('auth')->group(function () {
             }
 
             $headers = $studentService->csvTemplateHeaders();
-            $sampleRow = [
-                $studentService->sanitizeCsvCell('Jane Doe'),
-                $studentService->sanitizeCsvCell('jane@example.com'),
-                $studentService->sanitizeCsvCell('+15550100'),
-                $studentService->sanitizeCsvCell(''),
-                $studentService->sanitizeCsvCell('Cohort 2026-A'),
-                $studentService->sanitizeCsvCell('Beginner'),
-                $studentService->sanitizeCsvCell(now()->toDateString()),
-                $studentService->sanitizeCsvCell('Imported student'),
-            ];
+            $sampleRows = $studentService->csvTemplateSampleRows();
 
             $handle = fopen('php://temp', 'r+');
+            // Write UTF-8 BOM
+            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
             fputcsv($handle, $headers);
-            fputcsv($handle, $sampleRow);
+            foreach ($sampleRows as $row) {
+                fputcsv($handle, array_map([$studentService, 'sanitizeCsvCell'], $row));
+            }
             rewind($handle);
             $csv = stream_get_contents($handle);
             fclose($handle);
@@ -186,6 +181,21 @@ Route::middleware('auth')->group(function () {
                 'X-Content-Type-Options' => 'nosniff',
             ]);
         })->name('admin.students.csv-template');
+
+        Route::get('/admin/students/export', function (Request $request, TenantContext $tenantContext, StudentManagementService $studentService) {
+            $academy = $tenantContext->getAcademy();
+            if ($academy === null) {
+                abort(404, 'No active academy selected.');
+            }
+
+            if ($request->user()->cannot('export', [StudentProfile::class, $academy])) {
+                abort(403);
+            }
+
+            $filters = $request->only(['search', 'status', 'proficiency', 'level', 'batch', 'course_id']);
+
+            return $studentService->exportCsv($academy, $filters, $request->user());
+        })->name('admin.students.export');
 
         Route::get('/admin/trainers', TrainersIndex::class)->name('admin.trainers.index');
         Route::get('/admin/members', MembersIndex::class)->name('admin.members.index');
@@ -274,7 +284,7 @@ Route::middleware('auth')->group(function () {
         ->name('support.tickets.show');
 
     Route::get('/student/dashboard', StudentDashboard::class)
-        ->middleware('role:student')
+        ->middleware(['auth', 'academy.context', 'academy.access', 'role:student'])
         ->name('student.dashboard');
 
     Route::get('/student/courses', StudentCoursesIndex::class)

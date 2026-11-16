@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Domain\Students\Models\StudentProfile;
 use App\Domain\Tenants\Services\TenantContext;
 use Closure;
 use Illuminate\Http\Request;
@@ -25,8 +26,20 @@ class EnsureAcademyAccess
             abort(403, 'Your account has been suspended.');
         }
 
-        if ($this->tenantContext->getAcademy() === null) {
+        $academy = $this->tenantContext->getAcademy();
+        if ($academy === null) {
             abort(403, 'No academy has been configured for this installation.');
+        }
+
+        if ($user->hasRole('student')) {
+            $studentProfile = StudentProfile::query()
+                ->where('academy_id', $academy->getKey())
+                ->where('user_id', $user->getKey())
+                ->first();
+
+            if ($studentProfile !== null && ! $studentProfile->active) {
+                abort(403, 'Your student account has been suspended.');
+            }
         }
 
         return $next($request);
