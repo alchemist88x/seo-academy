@@ -15,8 +15,8 @@ class EnsureApplicationInstalled
 
     public function handle(Request $request, Closure $next): Response
     {
-        // Allow installer routes and healthcheck to bypass installed verification
-        if ($request->routeIs('install.*') || $request->is('install*') || $request->is('up')) {
+        // Allow installer routes, Livewire scripts, Vite assets, and healthcheck to bypass installed verification
+        if ($request->routeIs('install.*') || $request->is('install*', 'livewire*', 'build/*', '_boost*', 'up')) {
             return $next($request);
         }
 

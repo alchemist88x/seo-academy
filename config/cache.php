@@ -15,7 +15,9 @@ return [
     |
     */
 
-    'default' => env('CACHE_STORE', 'database'),
+    'default' => file_exists(storage_path('app/private/installed.lock'))
+        ? env('CACHE_STORE', 'database')
+        : (env('CACHE_STORE') === 'database' ? 'file' : env('CACHE_STORE', 'file')),
 
     /*
     |--------------------------------------------------------------------------

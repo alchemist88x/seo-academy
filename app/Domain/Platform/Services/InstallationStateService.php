@@ -3,33 +3,62 @@
 namespace App\Domain\Platform\Services;
 
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Str;
 
 class InstallationStateService
 {
     public const STATE_NOT_STARTED = 'not_started';
-    public const STATE_REQUIREMENTS = 'requirements_check';
-    public const STATE_DEPENDENCIES = 'dependencies_check';
-    public const STATE_ENVIRONMENT = 'environment_setup';
+
+    public const STATE_WELCOME = 'welcome';
+
+    public const STATE_REQUIREMENTS = 'requirements';
+
+    public const STATE_DEPENDENCIES = 'dependencies';
+
+    public const STATE_DATABASE_SELECTION = 'database_selection';
+
     public const STATE_DATABASE_CONFIG = 'database_configuration';
+
+    public const STATE_DATABASE_TEST = 'database_test';
+
     public const STATE_MIGRATION = 'migration';
-    public const STATE_FILESYSTEM = 'filesystem_setup';
-    public const STATE_ACADEMY = 'academy_configuration';
-    public const STATE_ADMIN = 'administrator_creation';
-    public const STATE_FINALIZATION = 'finalization';
+
+    public const STATE_ACADEMY = 'academy';
+
+    public const STATE_ADMIN = 'admin';
+
+    public const STATE_VERIFICATION = 'verification';
+
     public const STATE_COMPLETED = 'completed';
+
     public const STATE_FAILED_RECOVERABLE = 'failed_recoverable';
 
+    // Legacy aliases for backward compatibility
+    public const STATE_REQUIREMENTS_LEGACY = 'requirements_check';
+
+    public const STATE_DEPENDENCIES_LEGACY = 'dependencies_check';
+
+    public const STATE_ENVIRONMENT = 'environment_setup';
+
+    public const STATE_FILESYSTEM = 'filesystem_setup';
+
+    public const STATE_ACADEMY_LEGACY = 'academy_configuration';
+
+    public const STATE_ADMIN_LEGACY = 'administrator_creation';
+
+    public const STATE_FINALIZATION = 'finalization';
+
     public const STEPS_ORDER = [
-        self::STATE_REQUIREMENTS => 1,
-        self::STATE_DEPENDENCIES => 2,
-        self::STATE_ENVIRONMENT => 3,
-        self::STATE_DATABASE_CONFIG => 4,
-        self::STATE_MIGRATION => 5,
-        self::STATE_FILESYSTEM => 6,
-        self::STATE_ACADEMY => 7,
-        self::STATE_ADMIN => 8,
-        self::STATE_FINALIZATION => 9,
+        self::STATE_WELCOME => 1,
+        self::STATE_REQUIREMENTS => 2,
+        self::STATE_DEPENDENCIES => 3,
+        self::STATE_DATABASE_SELECTION => 4,
+        self::STATE_DATABASE_CONFIG => 5,
+        self::STATE_DATABASE_TEST => 6,
+        self::STATE_MIGRATION => 7,
+        self::STATE_ACADEMY => 8,
+        self::STATE_ADMIN => 9,
+        self::STATE_VERIFICATION => 10,
+        self::STATE_COMPLETED => 11,
     ];
 
     public function __construct(
@@ -90,7 +119,7 @@ class InstallationStateService
     /**
      * Save the updated installation state to disk safely.
      *
-     * @param array<string, mixed> $state
+     * @param  array<string, mixed>  $state
      */
     public function saveState(array $state): void
     {
@@ -179,7 +208,33 @@ class InstallationStateService
     public function isStepCompleted(string $step): bool
     {
         $state = $this->getState();
-        return in_array($step, $state['completed_steps'], true);
+        $completed = $state['completed_steps'] ?? [];
+
+        if (in_array($step, $completed, true)) {
+            return true;
+        }
+
+        // Check backward-compatible aliases
+        $aliases = [
+            self::STATE_REQUIREMENTS => ['requirements_check'],
+            self::STATE_REQUIREMENTS_LEGACY => ['requirements'],
+            self::STATE_DEPENDENCIES => ['dependencies_check'],
+            self::STATE_DEPENDENCIES_LEGACY => ['dependencies'],
+            self::STATE_ACADEMY => ['academy_configuration'],
+            self::STATE_ACADEMY_LEGACY => ['academy'],
+            self::STATE_ADMIN => ['administrator_creation'],
+            self::STATE_ADMIN_LEGACY => ['admin'],
+            self::STATE_VERIFICATION => ['finalization'],
+            self::STATE_FINALIZATION => ['verification'],
+        ];
+
+        foreach ($aliases[$step] ?? [] as $alias) {
+            if (in_array($alias, $completed, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -194,7 +249,7 @@ class InstallationStateService
             return $steps[$idx + 1];
         }
 
-        return self::STATE_FINALIZATION;
+        return self::STATE_VERIFICATION;
     }
 
     /**
@@ -203,17 +258,19 @@ class InstallationStateService
     public function getRouteForStep(string $step): string
     {
         return match ($step) {
-            self::STATE_REQUIREMENTS => 'install.step.requirements',
-            self::STATE_DEPENDENCIES => 'install.step.dependencies',
-            self::STATE_ENVIRONMENT => 'install.step.environment',
-            self::STATE_DATABASE_CONFIG => 'install.step.database',
-            self::STATE_MIGRATION => 'install.step.migrations',
-            self::STATE_FILESYSTEM => 'install.step.storage',
-            self::STATE_ACADEMY => 'install.step.academy',
-            self::STATE_ADMIN => 'install.step.admin',
-            self::STATE_FINALIZATION => 'install.step.finalization',
+            self::STATE_WELCOME => 'install.index',
+            self::STATE_REQUIREMENTS, 'requirements_check' => 'install.step.requirements',
+            self::STATE_DEPENDENCIES, 'dependencies_check' => 'install.step.dependencies',
+            self::STATE_DATABASE_SELECTION => 'install.step.database',
+            self::STATE_DATABASE_CONFIG, 'database_configuration' => 'install.step.database',
+            self::STATE_DATABASE_TEST => 'install.step.database',
+            self::STATE_MIGRATION, 'migration' => 'install.step.migrations',
+            'filesystem_setup' => 'install.step.storage',
+            self::STATE_ACADEMY, 'academy_configuration' => 'install.step.academy',
+            self::STATE_ADMIN, 'administrator_creation' => 'install.step.admin',
+            self::STATE_VERIFICATION, self::STATE_FINALIZATION, 'finalization' => 'install.step.finalization',
             self::STATE_COMPLETED => 'install.complete',
-            default => 'install.step.requirements',
+            default => 'install.index',
         };
     }
 

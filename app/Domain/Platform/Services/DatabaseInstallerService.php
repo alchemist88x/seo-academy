@@ -1192,7 +1192,7 @@ class DatabaseInstallerService
                 throw new RuntimeException($check['message']);
             }
 
-            $sqlitePath = $this->sqliteDatabasePath();
+            $sqlitePath = str_replace('\\', '/', $this->sqliteDatabasePath());
             $this->persistEnv([
                 'DB_CONNECTION' => 'sqlite',
                 'DB_DATABASE' => $sqlitePath,
@@ -1742,7 +1742,7 @@ class DatabaseInstallerService
                 return $test;
             }
 
-            $path = $dbConfig['path'] ?? $this->sqliteDatabasePath();
+            $path = str_replace('\\', '/', $dbConfig['path'] ?? $this->sqliteDatabasePath());
             $this->persistEnv([
                 'DB_CONNECTION' => 'sqlite',
                 'DB_DATABASE' => $path,
@@ -1883,7 +1883,7 @@ class DatabaseInstallerService
      */
     public function configureAcademyProfile(array $config): Academy
     {
-        $academy = Academy::first() ?? new Academy();
+        $academy = Academy::first() ?? new Academy;
         $academy->name = trim($config['name']);
         $academy->slug = ! empty($config['slug']) ? Str::slug($config['slug']) : Str::slug($config['name']);
         $academy->support_email = trim($config['support_email']);
@@ -1918,7 +1918,7 @@ class DatabaseInstallerService
         $user = User::where('email', $email)->first();
 
         if (! $user) {
-            $user = new User();
+            $user = new User;
             $user->id = (string) Str::uuid();
             $user->email = $email;
         }

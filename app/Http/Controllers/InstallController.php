@@ -8,7 +8,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\View\View;
 use Throwable;
@@ -21,7 +20,7 @@ class InstallController extends Controller
     ) {}
 
     /**
-     * Entry router: renders the comprehensive installation wizard or routes to staged step.
+     * Entry router: renders the professional multi-step installation wizard.
      */
     public function index(Request $request): View|RedirectResponse
     {
@@ -33,15 +32,11 @@ class InstallController extends Controller
             $sessionId = $request->session()->getId();
             $state = $this->stateService->initializeSession($sessionId);
             $currentStep = $state['current_step'] ?? InstallationStateService::STATE_REQUIREMENTS;
+
             return redirect()->route($this->stateService->getRouteForStep($currentStep));
         }
 
-        $requirements = $this->installer->checkSystemRequirements();
-
-        return view('install.database', [
-            'requirements' => $requirements,
-            'isInstalled' => false,
-        ]);
+        return view('install.index');
     }
 
     /**
@@ -468,6 +463,7 @@ class InstallController extends Controller
             return redirect()->route('install.step.admin');
         } catch (Throwable $e) {
             $sanitized = $this->installer->sanitizeErrorMessage($e->getMessage());
+
             return back()->withInput()->withErrors(['academy' => "Failed to save academy profile: {$sanitized}"]);
         }
     }
@@ -513,6 +509,7 @@ class InstallController extends Controller
             return redirect()->route('install.step.finalization');
         } catch (Throwable $e) {
             $sanitized = $this->installer->sanitizeErrorMessage($e->getMessage());
+
             return back()
                 ->withInput($request->except(['admin_password', 'admin_password_confirmation']))
                 ->withErrors(['admin' => "Failed to establish administrator account: {$sanitized}"]);
@@ -554,6 +551,7 @@ class InstallController extends Controller
                 ->with('admin_email', $state['admin_email'] ?? 'Administrator');
         } catch (Throwable $e) {
             $sanitized = $this->installer->sanitizeErrorMessage($e->getMessage());
+
             return back()->withErrors(['finalization' => "Finalization failed: {$sanitized}"]);
         }
     }

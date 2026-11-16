@@ -96,15 +96,20 @@ class InstallWizardTest extends TestCase
         $response = $this->get('/install');
 
         $response->assertStatus(200);
-        $response->assertSee('Customer Installation Wizard');
+        $response->assertSee('Installation Wizard');
         $response->assertSee('Step 1 — Welcome');
-        $response->assertSee('Step 2 — Server Requirements');
-        $response->assertSee('Step 3 — Database Engine');
-        $response->assertSee('Step 4 — Academy Profile');
-        $response->assertSee('Step 5 — Initial Administrator');
-        $response->assertSee('Step 6 — System Defaults');
-        $response->assertSee('SQLite 3');
-        $response->assertSee('MySQL 8');
+        $response->assertSee('Welcome');
+        $response->assertSee('Requirements');
+        $response->assertSee('Dependencies');
+        $response->assertSee('Engine');
+        $response->assertSee('Migrations');
+        $response->assertSee('Academy');
+        $response->assertSee('Admin');
+        $response->assertSee('Start Installation');
+
+        // Verify later step forms are not crammed onto step 1
+        $response->assertDontSee('Official Support Email');
+        $response->assertDontSee('Admin Password * (Min 8 chars)');
     }
 
     public function test_connection_endpoint_validates_sqlite_and_mysql_without_leaking_passwords(): void
