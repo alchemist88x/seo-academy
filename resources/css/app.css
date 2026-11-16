@@ -404,12 +404,19 @@
     .modal-backdrop {
         position: fixed;
         inset: 0;
-        background-color: rgb(0 0 0 / 0.5);
+        background-color: rgb(0 0 0 / 0.6);
+        backdrop-filter: blur(2px);
         z-index: 50;
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 1rem;
+        padding: 0.5rem;
+    }
+
+    @media (min-width: 640px) {
+        .modal-backdrop {
+            padding: 1rem;
+        }
     }
 
     .modal-panel {
@@ -418,7 +425,23 @@
         box-shadow: var(--shadow-modal);
         width: 100%;
         max-width: 32rem;
+        max-height: calc(100dvh - 1rem);
+        display: flex;
+        flex-direction: column;
         overflow: hidden;
+    }
+
+    @media (min-width: 640px) {
+        .modal-panel {
+            max-height: calc(100dvh - 2rem);
+        }
+    }
+
+    .modal-body {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        min-height: 0;
     }
 
     /* Table */

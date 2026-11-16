@@ -69,9 +69,25 @@ server {
         deny all;
     }
 
+    # Hostinger CloudPanel & Nginx Livewire Endpoint Routing
+    # Required when Nginx static file rules (try_files $uri =404) are active:
+    location ~* ^/livewire.*\.js$ {
+        try_files $uri /index.php?$query_string;
+    }
+
     client_max_body_size 50M;
 }
 ```
+
+### Hostinger CloudPanel Configuration Note
+
+In Hostinger CloudPanel, static asset caching is enabled by default with `try_files $uri =404`. 
+- **Pre-Published Assets:** Livewire static assets are pre-published under `public/vendor/livewire/` and compiled Vite assets under `public/build/`. These are served directly by Nginx as static files without requiring a Node.js runtime.
+- **Vhost Fallback Rule:** If deploying via git without pre-published assets or if using dynamic Livewire route resolution, add the `location ~* ^/livewire.*\.js$` block shown above in the CloudPanel Site Vhost settings to route `.js` Livewire endpoints to `/index.php?$query_string`.
+- **Artisan Asset Publish:** If deploying manually from source, run:
+  ```bash
+  php artisan vendor:publish --tag=livewire:assets --force
+  ```
 
 Enable the configuration and reload Nginx:
 ```bash

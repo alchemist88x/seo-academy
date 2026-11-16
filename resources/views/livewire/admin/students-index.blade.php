@@ -250,12 +250,17 @@
     </x-card>
 
     {{-- Create / Edit Student Modal --}}
-    <x-modal name="student-form-modal" :title="$editingStudentId ? 'Edit Student Profile' : 'Add New Student'" maxWidth="lg">
-        <form wire:submit="saveStudent" class="space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <x-modal
+        name="student-form-modal"
+        :title="$editingStudentId ? 'Edit Student Profile' : 'Add New Student'"
+        :description="$editingStudentId ? 'Update student account details, proficiency tier, and enrollment status.' : 'Register a new student account with course enrollment and proficiency classification.'"
+        maxWidth="lg"
+    >
+        <form id="student-form" wire:submit="saveStudent" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
                 <x-input
                     name="first_name"
-                    label="First Name *"
+                    label="First Name"
                     wire:model="first_name"
                     required
                 />
@@ -268,7 +273,7 @@
 
                 <x-input
                     name="email"
-                    label="Email Address *"
+                    label="Email Address"
                     type="email"
                     wire:model="email"
                     required
@@ -284,7 +289,7 @@
                 {{-- Proficiency Classification Selector --}}
                 <div class="sm:col-span-2">
                     <label class="block text-xs font-semibold text-text-primary mb-1.5">
-                        Student Proficiency Classification *
+                        Student Proficiency Classification <span class="text-red-500">*</span>
                     </label>
                     <div class="grid grid-cols-3 gap-2">
                         @foreach ($proficiencies as $key => $label)
@@ -315,7 +320,7 @@
 
                 <x-select
                     name="account_status"
-                    label="Account Status *"
+                    label="Account Status"
                     wire:model="account_status"
                     :options="[
                         'active' => 'Active',
@@ -370,19 +375,21 @@
                     <p class="form-error">{{ $message }}</p>
                 @enderror
             </div>
+        </form>
 
-            <div class="pt-3 border-t border-border-default flex justify-end gap-2">
+        <x-slot:footer>
+            <div class="flex items-center justify-end gap-2.5 w-full">
                 <x-button variant="secondary" type="button" x-on:click="$dispatch('close-modal', 'student-form-modal')">
                     Cancel
                 </x-button>
-                <x-button variant="primary" type="submit" wire:loading.attr="disabled">
+                <x-button variant="primary" type="submit" form="student-form" wire:loading.attr="disabled">
                     <span wire:loading.remove wire:target="saveStudent">
                         {{ $editingStudentId ? 'Save Profile Changes' : 'Create Student Account' }}
                     </span>
                     <span wire:loading wire:target="saveStudent">Saving...</span>
                 </x-button>
             </div>
-        </form>
+        </x-slot:footer>
     </x-modal>
 
     {{-- View Student Profile Modal --}}
