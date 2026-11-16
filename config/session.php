@@ -18,7 +18,9 @@ return [
     |
     */
 
-    'driver' => env('SESSION_DRIVER', 'database'),
+    'driver' => file_exists(storage_path('app/private/installed.lock'))
+        ? env('SESSION_DRIVER', 'database')
+        : (env('SESSION_DRIVER') === 'database' ? 'file' : env('SESSION_DRIVER', 'file')),
 
     /*
     |--------------------------------------------------------------------------

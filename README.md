@@ -16,9 +16,21 @@ A self-hosted Learning Management System built on a **FOSS-first** Laravel 13 mo
   - `Academy::current()` singleton guard, `TenantContext`, `ResolveAcademyContext`, `EnsureAcademyAccess`, and `BelongsToAcademy` trait.
   - Academy memberships (`academy_users`) with invitation-only onboarding (no public `/register` or `/academy/switch/{academy}`).
   - Spatie roles (`admin`, `trainer`, `support_staff`, `student`) and role-scoped dashboards (`/admin/dashboard`, `/trainer/dashboard`, `/support/dashboard`, `/student/dashboard`).
-- **Web Database Setup Wizard (`/install`):**
-  - `GET /install`, `POST /install/test-connection` (SQLite writability & MySQL InnoDB/DDL/DML permission probe), and `POST /install/database` (writes `.env`, runs migrations + `RoleSeeder`, creates `storage/app/private/installed.lock`).
-  - Guarded by `EnsureNotInstalled` middleware once `installed.lock` is present.
+- **Zero-Terminal Browser Installation System (`/install`):**
+  - Completely browser-driven deployment for Apache shared hosting and VPS environments without requiring terminal or SSH access.
+  - Zero-dependency standalone pre-flight bootstrapper (`bootstrap/preflight.php`) that catches missing dependencies and auto-creates `.env` with a 256-bit AES `APP_KEY`.
+  - Resilient, idempotent 9-step staged installation wizard:
+    1. Server & PHP Requirements Check (PHP 8.3+, required extensions, memory, execution time, directory permissions).
+    2. Composer Dependencies Verification (`composer.json`, `vendor/autoload.php`, `installed.json`, version constraint check).
+    3. Automatic Environment Setup (`.env` creation, `APP_KEY` verification, webroot protection).
+    4. Database Selection & Configuration (SQLite 3.35+ self-contained vs MySQL 8.4+ InnoDB with switching protection).
+    5. Database Initialization & Schema Migrations (sequential execution of all 86 migrations, role seeding, no `migrate:fresh`).
+    6. Filesystem Storage Verification (private media, backup, session, and cache directories).
+    7. Academy Profile Setup (name, slug, support email, timezone, locale, currency, date/time format).
+    8. Primary Administrator Account Creation (super administrator with `admin` role).
+    9. System Finalization & Security Lock (clears caches, generates `storage/app/private/installed.lock`, blocks installer routes).
+  - Browser-based System Diagnostics (`/install/diagnostics`) with sanitized report export.
+  - Guarded by `EnsureNotInstalled` and `EnsureApplicationInstalled` middleware.
 - **Authenticated Private Media Streaming (`GET /media/{media}`):**
   - Stored outside webroot on `private_media` (`storage/app/private/media/`).
   - Enforces authentication, tenant authorization, valid active enrollment verification, and HTTP `Range` (`206 Partial Content`) streaming.

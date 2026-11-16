@@ -23,14 +23,21 @@ class DatabaseInstallerService
     public const IDENTITY_TABLE = 'installation_identity';
 
     public const COMMON_REQUIRED_EXTENSIONS = [
-        'pdo',
+        'bcmath',
+        'ctype',
+        'curl',
+        'dom',
+        'fileinfo',
+        'filter',
+        'hash',
+        'json',
         'mbstring',
         'openssl',
+        'pcre',
+        'pdo',
+        'session',
         'tokenizer',
         'xml',
-        'ctype',
-        'json',
-        'fileinfo',
         'zip',
     ];
 
@@ -560,10 +567,12 @@ class DatabaseInstallerService
                 ];
             }
 
+            $identity = $this->getInstallationIdentity($pdo, $driver);
+            $hasVerifiedIdentity = ($identity !== null && ($identity['app'] ?? '') === 'seo-academy' && ! empty($identity['installation_uuid']));
+
             // Ambiguous / Inconsistent states: fail-closed, DO NOT regenerate lock
             if ($academyExists && ! $markerExists) {
-                $identity = $this->getInstallationIdentity($pdo, $driver);
-                if ($identity !== null && ($identity['app'] ?? '') === 'seo-academy' && ! empty($identity['installation_uuid'])) {
+                if ($hasVerifiedIdentity) {
                     return [
                         'status' => 'partial_installation',
                         'message' => 'Incomplete SEO Academy installation detected with verified identity.',
@@ -584,6 +593,13 @@ class DatabaseInstallerService
             }
 
             if ($academyExists && ! $adminExists) {
+                if ($hasVerifiedIdentity) {
+                    return [
+                        'status' => 'partial_installation',
+                        'message' => 'Incomplete SEO Academy installation detected with verified identity.',
+                    ];
+                }
+
                 return [
                     'status' => 'ambiguous',
                     'message' => 'Academy record exists without an associated administrator. Installation state is ambiguous.',
@@ -712,6 +728,9 @@ class DatabaseInstallerService
             'storage/app' => storage_path('app'),
             'storage/app/private' => storage_path('app/private'),
             'storage/framework' => storage_path('framework'),
+            'storage/framework/cache' => storage_path('framework/cache'),
+            'storage/framework/sessions' => storage_path('framework/sessions'),
+            'storage/framework/views' => storage_path('framework/views'),
             'storage/logs' => storage_path('logs'),
             'bootstrap/cache' => base_path('bootstrap/cache'),
         ];
@@ -737,16 +756,69 @@ class DatabaseInstallerService
             ];
         }
 
+        // 4. Server Limits & PHP Runtime
+        $memoryLimit = ini_get('memory_limit') ?: '128M';
+        $executionTime = (int) (ini_get('max_execution_time') ?: 30);
+        $uploadMax = ini_get('upload_max_filesize') ?: '2M';
+        $postMax = ini_get('post_max_size') ?: '8M';
+
+        // 5. SQLite version check (if sqlite extension is loaded)
+        $sqliteVersion = null;
+        $sqliteOk = true;
+        if ($sqliteLoaded) {
+            try {
+                $probe = new PDO('sqlite::memory:');
+                $sqliteVersion = (string) $probe->query('SELECT sqlite_version()')->fetchColumn();
+                $sqliteOk = version_compare($sqliteVersion, '3.35.0', '>=');
+            } catch (Throwable) {
+                $sqliteOk = false;
+            }
+        }
+
+        $warnings = [];
+        $correctiveActions = [];
+
+        if (! $phpOk) {
+            $correctiveActions[] = 'Upgrade your PHP runtime to version 8.3.0 or later.';
+        }
+        foreach ($extensions as $extName => $extData) {
+            if ($extData['required'] && ! $extData['loaded']) {
+                $correctiveActions[] = "Enable the PHP '{$extName}' extension in your php.ini or hosting panel.";
+            }
+        }
+        foreach ($directories as $dirName => $dirData) {
+            if (! $dirData['ok']) {
+                $correctiveActions[] = "Ensure directory '{$dirName}' exists and has write permissions (chmod 755 or 775).";
+            }
+        }
+        if ($sqliteLoaded && ! $sqliteOk) {
+            $warnings[] = "Installed SQLite library is {$sqliteVersion}. Version 3.35.0+ is recommended for modern SQL syntax.";
+        }
+
         return [
             'compatible' => $phpOk && $extensionsOk && $dirsOk,
             'driver' => $driver,
             'php' => [
                 'required' => '8.3.0',
                 'current' => $phpVersion,
+                'sapi' => PHP_SAPI,
                 'ok' => $phpOk,
             ],
             'extensions' => $extensions,
             'directories' => $directories,
+            'server_limits' => [
+                'memory_limit' => $memoryLimit,
+                'max_execution_time' => $executionTime,
+                'upload_max_filesize' => $uploadMax,
+                'post_max_size' => $postMax,
+            ],
+            'sqlite' => [
+                'loaded' => $sqliteLoaded,
+                'version' => $sqliteVersion,
+                'ok' => $sqliteOk,
+            ],
+            'warnings' => $warnings,
+            'corrective_actions' => $correctiveActions,
         ];
     }
 
@@ -1515,5 +1587,534 @@ class DatabaseInstallerService
         }
 
         return $value;
+    }
+
+    /**
+     * Inspect Composer dependencies and validate required packages.
+     *
+     * @return array{
+     *     compatible: bool,
+     *     has_composer_json: bool,
+     *     has_autoload: bool,
+     *     has_installed_json: bool,
+     *     packages: array<string, array{required: string, installed: string|null, ok: bool}>,
+     *     missing: list<string>
+     * }
+     */
+    public function checkComposerDependencies(): array
+    {
+        $composerJsonPath = base_path('composer.json');
+        $autoloadPath = base_path('vendor/autoload.php');
+        $installedJsonPath = base_path('vendor/composer/installed.json');
+
+        $hasComposerJson = file_exists($composerJsonPath);
+        $hasAutoload = file_exists($autoloadPath);
+        $hasInstalledJson = file_exists($installedJsonPath);
+
+        $requiredCore = [
+            'laravel/framework' => '^13.17',
+            'livewire/livewire' => '^4.4',
+            'dompdf/dompdf' => '^3.1',
+            'spatie/laravel-permission' => '^8.5',
+        ];
+
+        $packages = [];
+        $missing = [];
+        $installedMap = [];
+
+        if ($hasInstalledJson) {
+            $installedData = json_decode((string) file_get_contents($installedJsonPath), true);
+            $rawPackages = $installedData['packages'] ?? [];
+            foreach ($rawPackages as $pkg) {
+                if (isset($pkg['name'], $pkg['version'])) {
+                    $installedMap[$pkg['name']] = (string) $pkg['version'];
+                }
+            }
+        }
+
+        foreach ($requiredCore as $name => $constraint) {
+            $installedVersion = $installedMap[$name] ?? null;
+            $ok = $installedVersion !== null;
+            if (! $ok) {
+                $missing[] = $name;
+            }
+            $packages[$name] = [
+                'required' => $constraint,
+                'installed' => $installedVersion,
+                'ok' => $ok,
+            ];
+        }
+
+        $compatible = $hasComposerJson && $hasAutoload && empty($missing);
+
+        return [
+            'compatible' => $compatible,
+            'has_composer_json' => $hasComposerJson,
+            'has_autoload' => $hasAutoload,
+            'has_installed_json' => $hasInstalledJson,
+            'packages' => $packages,
+            'missing' => $missing,
+        ];
+    }
+
+    /**
+     * Inspect .env file existence, APP_KEY presence, and public protection.
+     *
+     * @return array{
+     *     compatible: bool,
+     *     has_env: bool,
+     *     has_key: bool,
+     *     is_protected: bool,
+     *     message: string
+     * }
+     */
+    public function checkEnvironmentSetup(): array
+    {
+        $envPath = $this->envPath ?? base_path('.env');
+        $hasEnv = file_exists($envPath);
+        $hasKey = false;
+
+        if ($hasEnv) {
+            $content = (string) file_get_contents($envPath);
+            if (preg_match('/^APP_KEY=(.+)$/m', $content, $matches)) {
+                $val = trim($matches[1]);
+                $hasKey = (str_starts_with($val, 'base64:') || strlen($val) >= 32);
+            }
+        }
+
+        // Verify .env is located outside web root (public)
+        $isProtected = ! str_starts_with(realpath($envPath) ?: '', realpath(public_path()) ?: '___none___');
+
+        $compatible = $hasEnv && $hasKey && $isProtected;
+
+        return [
+            'compatible' => $compatible,
+            'has_env' => $hasEnv,
+            'has_key' => $hasKey,
+            'is_protected' => $isProtected,
+            'message' => $compatible
+                ? 'Environment file is securely initialized with an active application key.'
+                : 'Environment file (.env) or application key requires setup.',
+        ];
+    }
+
+    /**
+     * Staged database configuration with switching protection.
+     *
+     * @param array{
+     *     driver: string,
+     *     host?: string|null,
+     *     port?: int|string|null,
+     *     database?: string|null,
+     *     username?: string|null,
+     *     password?: string|null,
+     *     path?: string|null
+     * } $dbConfig
+     * @return array{ok: bool, requires_confirmation?: bool, message: string}
+     */
+    public function configureDatabase(array $dbConfig, bool $confirmSwitch = false): array
+    {
+        $driver = $dbConfig['driver'] ?? 'sqlite';
+        $currentDriver = config('database.default', 'sqlite');
+
+        // Check if database driver is changing on an existing installation with tables
+        if ($driver !== $currentDriver && ! $confirmSwitch) {
+            try {
+                $currentPdo = $this->getTargetPdo($currentDriver);
+                if ($currentPdo instanceof PDO) {
+                    $status = $this->getDatabaseInstallationStatus($currentPdo, $currentDriver);
+                    if (in_array($status['status'], ['installed', 'partial_installation', 'installed_academy_exists'], true)) {
+                        return [
+                            'ok' => false,
+                            'requires_confirmation' => true,
+                            'message' => "The previous database ({$currentDriver}) contains existing records. Switching to {$driver} will not migrate existing data. Please confirm you wish to switch.",
+                        ];
+                    }
+                }
+            } catch (Throwable) {
+                // If previous DB is unreachable, allow switching
+            }
+        }
+
+        if ($driver === 'sqlite') {
+            $test = $this->testSqliteConnection($dbConfig['path'] ?? null);
+            if (! $test['ok']) {
+                return $test;
+            }
+
+            $path = $dbConfig['path'] ?? $this->sqliteDatabasePath();
+            $this->persistEnv([
+                'DB_CONNECTION' => 'sqlite',
+                'DB_DATABASE' => $path,
+            ]);
+
+            config([
+                'database.default' => 'sqlite',
+                'database.connections.sqlite.database' => $path,
+            ]);
+            DB::purge('sqlite');
+        } else {
+            $test = $this->testMySqlConnection($dbConfig);
+            if (! $test['ok']) {
+                return $test;
+            }
+
+            $this->persistEnv([
+                'DB_CONNECTION' => 'mysql',
+                'DB_HOST' => (string) ($dbConfig['host'] ?? '127.0.0.1'),
+                'DB_PORT' => (int) ($dbConfig['port'] ?? 3306),
+                'DB_DATABASE' => (string) ($dbConfig['database'] ?? ''),
+                'DB_USERNAME' => (string) ($dbConfig['username'] ?? ''),
+                'DB_PASSWORD' => (string) ($dbConfig['password'] ?? ''),
+            ]);
+
+            config([
+                'database.default' => 'mysql',
+                'database.connections.mysql.host' => $dbConfig['host'] ?? '127.0.0.1',
+                'database.connections.mysql.port' => $dbConfig['port'] ?? 3306,
+                'database.connections.mysql.database' => $dbConfig['database'] ?? '',
+                'database.connections.mysql.username' => $dbConfig['username'] ?? '',
+                'database.connections.mysql.password' => $dbConfig['password'] ?? '',
+            ]);
+            DB::purge('mysql');
+        }
+
+        return [
+            'ok' => true,
+            'message' => "Database configuration successfully updated and verified for {$driver}.",
+        ];
+    }
+
+    /**
+     * Execute migrations and establish core security roles.
+     *
+     * @return array{ok: bool, count: int, message: string}
+     */
+    public function runMigrationsAndSeedRoles(): array
+    {
+        $driver = config('database.default', 'sqlite');
+        $pdo = $this->getTargetPdo($driver);
+
+        if (! $pdo instanceof PDO) {
+            throw new RuntimeException("Unable to establish PDO connection for {$driver} prior to migration.");
+        }
+
+        // Claim database identity
+        $this->persistInstallationIdentity($pdo, $driver, 'in_progress');
+
+        // Execute all migrations
+        $this->runMigrationsAndSeeders(seedRoles: true);
+
+        return [
+            'ok' => true,
+            'count' => count(self::KNOWN_MIGRATIONS),
+            'message' => 'All application database migrations and role definitions executed successfully.',
+        ];
+    }
+
+    /**
+     * Verify filesystem storage permissions and directory layout.
+     *
+     * @return array{compatible: bool, directories: array<string, array{path: string, exists: bool, writable: bool, ok: bool}>}
+     */
+    public function verifyFilesystemStorage(): array
+    {
+        $dirs = [
+            'storage/app/private' => storage_path('app/private'),
+            'storage/app/private/media' => storage_path('app/private/media'),
+            'storage/app/private/backups' => storage_path('app/private/backups'),
+            'storage/framework/cache' => storage_path('framework/cache'),
+            'storage/framework/sessions' => storage_path('framework/sessions'),
+            'storage/framework/views' => storage_path('framework/views'),
+            'storage/logs' => storage_path('logs'),
+            'bootstrap/cache' => base_path('bootstrap/cache'),
+        ];
+
+        $results = [];
+        $compatible = true;
+
+        foreach ($dirs as $label => $path) {
+            File::ensureDirectoryExists($path);
+            $exists = file_exists($path);
+            $writable = is_writable($path);
+
+            // Conduct probe file test
+            if ($exists && $writable) {
+                $probeFile = $path.DIRECTORY_SEPARATOR.'_perm_probe_'.bin2hex(random_bytes(4)).'.tmp';
+                if (@file_put_contents($probeFile, 'probe') !== false) {
+                    @unlink($probeFile);
+                } else {
+                    $writable = false;
+                }
+            }
+
+            $ok = $exists && $writable;
+            if (! $ok) {
+                $compatible = false;
+            }
+
+            $results[$label] = [
+                'path' => $path,
+                'exists' => $exists,
+                'writable' => $writable,
+                'ok' => $ok,
+            ];
+        }
+
+        return [
+            'compatible' => $compatible,
+            'directories' => $results,
+        ];
+    }
+
+    /**
+     * Staged configuration of the single Academy organization.
+     *
+     * @param array{
+     *     name: string,
+     *     slug?: string|null,
+     *     support_email: string,
+     *     timezone?: string|null,
+     *     locale?: string|null,
+     *     currency?: string|null,
+     *     date_format?: string|null,
+     *     time_format?: string|null
+     * } $config
+     */
+    public function configureAcademyProfile(array $config): Academy
+    {
+        $academy = Academy::first() ?? new Academy();
+        $academy->name = trim($config['name']);
+        $academy->slug = ! empty($config['slug']) ? Str::slug($config['slug']) : Str::slug($config['name']);
+        $academy->support_email = trim($config['support_email']);
+        $academy->timezone = $config['timezone'] ?? 'UTC';
+        $academy->locale = $config['locale'] ?? 'en';
+        $academy->is_active = true;
+
+        $settings = is_array($academy->settings) ? $academy->settings : [];
+        $settings['currency'] = $config['currency'] ?? 'USD';
+        $settings['date_format'] = $config['date_format'] ?? 'Y-m-d';
+        $settings['time_format'] = $config['time_format'] ?? 'H:i';
+        $settings['single_tenant'] = true;
+        $academy->settings = $settings;
+
+        $academy->save();
+
+        return $academy;
+    }
+
+    /**
+     * Create or update the initial primary administrator account.
+     *
+     * @param array{
+     *     name: string,
+     *     email: string,
+     *     password?: string|null
+     * } $config
+     */
+    public function createFirstAdministrator(array $config): User
+    {
+        $email = strtolower(trim($config['email']));
+        $user = User::where('email', $email)->first();
+
+        if (! $user) {
+            $user = new User();
+            $user->id = (string) Str::uuid();
+            $user->email = $email;
+        }
+
+        $user->name = trim($config['name']);
+        if (! empty($config['password'])) {
+            $user->password = Hash::make($config['password']);
+        }
+        $user->is_active = true;
+        $user->email_verified_at = now();
+        $user->save();
+
+        // Assign only 'admin' role
+        $user->syncRoles(['admin']);
+
+        // Attach user to Academy in academy_users table
+        $academy = Academy::first();
+        if ($academy) {
+            $existingMembership = DB::table('academy_users')
+                ->where('user_id', $user->id)
+                ->where('academy_id', $academy->id)
+                ->first();
+
+            if (! $existingMembership) {
+                DB::table('academy_users')->insert([
+                    'id' => (string) Str::uuid(),
+                    'user_id' => $user->id,
+                    'academy_id' => $academy->id,
+                    'role' => 'admin',
+                    'status' => 'active',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            } else {
+                DB::table('academy_users')
+                    ->where('id', $existingMembership->id)
+                    ->update([
+                        'role' => 'admin',
+                        'status' => 'active',
+                        'updated_at' => now(),
+                    ]);
+            }
+        }
+
+        return $user;
+    }
+
+    /**
+     * Finalize installation: verify health, clear caches, write installed.lock.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function finalizeInstallation(): array
+    {
+        $driver = config('database.default', 'sqlite');
+        $pdo = $this->getTargetPdo($driver);
+
+        if (! $pdo instanceof PDO) {
+            throw new RuntimeException('Target database connection could not be verified during finalization.');
+        }
+
+        $academy = Academy::first();
+        if (! $academy) {
+            throw new RuntimeException('Academy profile is missing. Installation cannot be finalized.');
+        }
+
+        $adminCount = User::role('admin')->count();
+        if ($adminCount === 0) {
+            throw new RuntimeException('Administrator account is missing. Installation cannot be finalized.');
+        }
+
+        // Record installed marker in academy settings
+        $settings = is_array($academy->settings) ? $academy->settings : [];
+        $settings['installed_at'] = now()->toIso8601String();
+        $academy->settings = $settings;
+        $academy->save();
+
+        // Record persistent identity as completed
+        $this->persistInstallationIdentity($pdo, $driver, 'completed');
+
+        // Write immutable lock file
+        $this->writeInstallLock($driver, [
+            'finalized_at' => now()->toIso8601String(),
+            'version' => '5.6.0',
+            'academy_id' => $academy->id,
+            'academy_name' => $academy->name,
+        ]);
+
+        // Safely clear configuration and route caches
+        try {
+            Artisan::call('config:clear');
+            Artisan::call('route:clear');
+            Artisan::call('view:clear');
+        } catch (Throwable) {
+            // Non-fatal cache clearing
+        }
+
+        return [
+            'ok' => true,
+            'message' => 'SEO Academy has been successfully installed and secured.',
+        ];
+    }
+
+    /**
+     * Generate complete system diagnostics.
+     *
+     * @return array<string, mixed>
+     */
+    public function getSystemDiagnostics(): array
+    {
+        $driver = config('database.default', 'sqlite');
+        $dbStatus = 'disconnected';
+        $dbVersion = 'Unknown';
+        $tableCount = 0;
+
+        try {
+            $pdo = $this->getTargetPdo($driver);
+            if ($pdo instanceof PDO) {
+                $dbStatus = 'connected';
+                if ($driver === 'sqlite') {
+                    $dbVersion = (string) $pdo->query('SELECT sqlite_version()')->fetchColumn();
+                    $stmt = $pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+                    $tableCount = $stmt ? (int) $stmt->fetchColumn() : 0;
+                } else {
+                    $dbVersion = (string) $pdo->getAttribute(PDO::ATTR_SERVER_VERSION);
+                    $stmt = $pdo->query('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()');
+                    $tableCount = $stmt ? (int) $stmt->fetchColumn() : 0;
+                }
+            }
+        } catch (Throwable) {
+            $dbStatus = 'error';
+        }
+
+        $migrationsExecuted = 0;
+        try {
+            $migrationsExecuted = DB::table('migrations')->count();
+        } catch (Throwable) {
+        }
+
+        $hasAssets = file_exists(public_path('build/manifest.json'));
+
+        return [
+            'timestamp' => now()->toIso8601String(),
+            'application' => [
+                'name' => 'SEO Academy',
+                'version' => '5.6.0',
+                'framework' => 'Laravel '.app()->version(),
+                'installed' => $this->isInstalled(),
+            ],
+            'php' => [
+                'version' => PHP_VERSION,
+                'sapi' => PHP_SAPI,
+                'os' => PHP_OS_FAMILY,
+                'memory_limit' => ini_get('memory_limit'),
+                'max_execution_time' => ini_get('max_execution_time'),
+                'upload_max_filesize' => ini_get('upload_max_filesize'),
+                'post_max_size' => ini_get('post_max_size'),
+            ],
+            'extensions' => array_combine(
+                self::COMMON_REQUIRED_EXTENSIONS,
+                array_map(fn ($ext) => extension_loaded($ext), self::COMMON_REQUIRED_EXTENSIONS)
+            ),
+            'database' => [
+                'driver' => $driver,
+                'status' => $dbStatus,
+                'version' => $dbVersion,
+                'tables' => $tableCount,
+                'migrations_executed' => $migrationsExecuted,
+                'known_migrations' => count(self::KNOWN_MIGRATIONS),
+            ],
+            'dependencies' => $this->checkComposerDependencies(),
+            'environment' => [
+                'has_env' => file_exists(base_path('.env')),
+                'app_key_configured' => ! empty(config('app.key')),
+                'app_env' => config('app.env'),
+                'app_debug' => config('app.debug'),
+            ],
+            'storage' => $this->verifyFilesystemStorage(),
+            'assets' => [
+                'compiled_manifest_exists' => $hasAssets,
+            ],
+        ];
+    }
+
+    /**
+     * Generate a sanitized diagnostics export without credentials or sensitive paths.
+     */
+    public function getSanitizedDiagnosticsReport(): string
+    {
+        $raw = $this->getSystemDiagnostics();
+
+        // Sanitize any potential absolute path references
+        $json = json_encode($raw, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        $base = addslashes(base_path());
+        $sanitized = str_replace([base_path(), $base], '[PROJECT_ROOT]', (string) $json);
+
+        return $sanitized;
     }
 }

@@ -1,84 +1,101 @@
-# SEO Academy — Customer Installation Guide
+# SEO Academy — Customer Zero-Terminal Installation Guide
 
-Welcome to **SEO Academy v5.4.0**! This guide walks you through installing and configuring your independent LMS installation using the built-in graphical Installation Wizard or the command line.
+Welcome to **SEO Academy v5.6.0**! SEO Academy is engineered for complete zero-terminal, browser-based installation. You do **not** need SSH, terminal access, command-line tools, or manual database setup to install and launch your academy.
 
 ---
 
 ## 1. Quick Installation Overview
 
-Installing SEO Academy requires three simple steps:
-1. **Upload & Extract:** Upload the release archive (`seo-academy-v5.4.0.zip`) to your hosting server and point your web server document root to the `/public` directory.
-2. **Set Directory Permissions:** Ensure the `storage/` and `bootstrap/cache/` directories are writable by your web server user.
-3. **Run the Wizard:** Navigate to your website URL (e.g. `https://your-domain.com/install`) and complete the 6-step setup.
+Installing SEO Academy requires only three simple steps:
+
+1. **Deploy Files:** Upload or clone the repository to your hosting account (cPanel, Plesk, Apache shared hosting, or VPS).
+2. **Set Document Root:** Configure your web server virtual host or domain document root to the project's `public/` directory.
+3. **Open Your Domain:** Navigate to your domain in any modern web browser (e.g. `https://your-domain.com`). The automated wizard launches immediately.
 
 ---
 
-## 2. Step-by-Step Installation Walkthrough
+## 2. Pre-flight Architecture & Safe Bootstrapper
 
-### Step 1: Upload and Extract Files
-- Upload `seo-academy-v5.4.0.zip` to your server.
-- Extract the archive into your chosen project root (for example, `/var/www/seo-academy` or `/home/user/seo-academy`).
-- Configure your web server virtual host so that the public web root points directly to the `/public` subfolder.
+When you open your domain for the first time:
 
-> [!IMPORTANT]
-> Never set the document root to the main application directory. Pointing directly to `/public` ensures that configuration files, templates, and private databases cannot be accessed directly via web browsers.
+- **Missing Vendor Handling:** If you deployed source without dependencies, the pre-flight bootstrapper catches this and displays a clean Dependency Pre-flight page instead of a fatal PHP exception.
+- **Automatic Environment Generation:** The installer reads `.env.example`, copies it to `.env`, and generates a cryptographically secure 256-bit AES `APP_KEY` automatically. You never need to manually copy or edit `.env` before installation.
+- **Route Protection:** Normal application routes (such as `/login`, `/admin`, and course portals) are automatically blocked until installation prerequisites and finalization are complete.
 
-### Step 2: Configure Directory Permissions
-Using SSH or your hosting File Manager, grant write permissions to the web server process (e.g. `www-data`, `nginx`, or your cPanel user):
+---
 
-```bash
-chmod -R 775 storage bootstrap/cache
-```
+## 3. The 9-Step Guided Browser Wizard
 
-On shared hosting, directories are typically owned by your user account and standard `755` permissions are sufficient.
+The installation wizard guides you step-by-step through a resilient, resumable process:
 
-### Step 3: Run the Graphical Installation Wizard
-Open your browser and navigate to:
+### Step 1: Server & PHP Requirements
+- Confirms PHP 8.3 or higher.
+- Inspects all mandatory extensions: `bcmath`, `ctype`, `curl`, `dom`, `fileinfo`, `filter`, `hash`, `mbstring`, `openssl`, `pcre`, `pdo`, `session`, `tokenizer`, `xml`, `zip`.
+- Checks driver-specific extensions (`pdo_sqlite` for SQLite, `pdo_mysql` for MySQL).
+- Verifies real write access across `storage/` and `bootstrap/cache/`.
+
+### Step 2: Composer Dependencies Check
+- Validates the presence of `composer.json`, `vendor/autoload.php`, and `installed.json`.
+- Confirms versions of `laravel/framework`, `livewire/livewire`, `dompdf/dompdf`, and `spatie/laravel-permission`.
+
+### Step 3: Automatic Environment Setup
+- Verifies `.env` generation and application encryption key.
+- Ensures the configuration file is protected from public browser access.
+
+### Step 4: Database Selection & Configuration
+- **SQLite (Recommended):** Zero-configuration, high-performance database stored securely in `storage/app/private/database.sqlite`. Fully self-contained.
+- **MySQL 8.4+ InnoDB:** Enter your host, port, database name, username, and password. Click **Test Connection** to verify connectivity, server version (8.4+), and InnoDB support before continuing.
+- **Database Switching Protection:** If an initialized database already exists, switching drivers requires explicit confirmation to protect existing data.
+
+### Step 5: Database Initialization & Migrations
+- Executes the registered 86-migration catalog sequentially and idempotently.
+- Installs the 4 standard security roles (`admin`, `trainer`, `support_staff`, `student`).
+- **Data Safety:** Never executes `migrate:fresh` or drops existing tables.
+
+### Step 6: Filesystem & Storage Setup
+- Creates and verifies write permissions on private directories:
+  - `storage/app/private/`
+  - `storage/app/private/media/`
+  - `storage/app/private/backups/`
+  - `storage/framework/cache/`
+  - `storage/framework/sessions/`
+  - `storage/framework/views/`
+  - `storage/logs/`
+  - `bootstrap/cache/`
+
+### Step 7: Academy Profile Configuration
+- Define your Academy Name and slug.
+- Configure primary contact/support email.
+- Set timezone, default locale (`en`, `es`, `fr`, `de`), currency code, and regional date/time formats.
+
+### Step 8: Primary Administrator Account
+- Enter your full name, administrator email, and a secure password (minimum 8 characters).
+- Creates the super administrator account and assigns the `admin` role.
+
+### Step 9: Finalization & Security Lock
+- Executes an end-to-end system healthcheck.
+- Safely clears configuration and view caches.
+- Writes the immutable sentinel lock file: `storage/app/private/installed.lock`.
+- Permanently locks the installer and redirects to the sign-in screen.
+
+---
+
+## 4. System Diagnostics
+
+You can inspect your instance health at any time during installation or post-installation by visiting:
 ```text
-https://your-domain.com/install
+https://your-domain.com/install/diagnostics
 ```
 
-The wizard will guide you through:
-- **Server Health Check:** Confirms your PHP version (8.3+) and required extensions (`pdo`, `bcmath`, `openssl`, `mbstring`, `fileinfo`, `gd`, `zip`).
-- **Database Selection:**
-  - **SQLite:** Zero configuration needed. The installer will create and secure your database file in `storage/app/private/database.sqlite`.
-  - **MySQL:** Enter your MySQL server host (`127.0.0.1`), port (`3306`), database name, username, and password. You can click **Test Connection** to verify your credentials before proceeding.
-- **Academy Profile:** Enter your Academy Name, Support Email, Timezone, and Locale.
-- **Initial Administrator Account:** Create your primary superuser account with your name, email, and a secure password.
-- **Database Migration & Initialization:** The wizard applies all 86 core database schemas, registers system roles, and provisions your initial academy.
-
-Upon completion, an installation lock file is written to `storage/app/private/installed.lock`. This prevents anyone from re-running the installer or altering your database.
+Click **Download Sanitized Report (JSON)** to generate a sanitized diagnostic export. All passwords, session tokens, and cryptographic keys are strictly excluded.
 
 ---
 
-## 3. Alternative: Command-Line Installation (CLI)
+## 5. Post-Installation Recommendations
 
-For system administrators deploying on headless VPS servers, installation can also be completed via the terminal:
-
-1. Copy `.env.example` to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-2. Generate your unique cryptographic application key:
-   ```bash
-   php artisan key:generate
-   ```
-3. Configure your database settings in `.env` (SQLite or MySQL).
-4. Run the database migrations and seed default roles:
-   ```bash
-   php artisan migrate --force
-   php artisan db:seed --class=Database\\Seeders\\RoleSeeder --force
-   ```
-5. Place the installation sentinel lock:
-   ```bash
-   touch storage/app/private/installed.lock
-   ```
-
----
-
-## 4. Post-Installation Checklist
-
-- [ ] **Configure Scheduled Tasks (Cron):** Add the Laravel scheduler to your server crontab (see [Shared Hosting Guide](file:///C:/laragon/www/seo-academy/docs/customer/shared-hosting.md) or [VPS Deployment Guide](file:///C:/laragon/www/seo-academy/docs/customer/vps-deployment.md)).
-- [ ] **Configure Email (SMTP):** Navigate to **Admin Dashboard -> Academy Settings** to set up your outgoing mail server for notifications and certificates.
-- [ ] **Verify SSL/HTTPS:** Ensure your SSL certificate is active and set `SESSION_SECURE_COOKIE=true` in `.env`.
-- [ ] **Create Your First Course:** Log in as your Administrator account to begin adding curriculum, modules, lessons, and assigning trainers.
+- [ ] **Configure Cron (Scheduled Tasks):** Add the Laravel schedule worker to your hosting cron:
+  ```text
+  * * * * * cd /path/to/seo-academy && php artisan schedule:run >> /dev/null 2>&1
+  ```
+- [ ] **Configure Outgoing Email (SMTP):** Sign in as Administrator and navigate to **Academy Settings -> Email** to configure transactional emails.
+- [ ] **Enforce HTTPS:** Ensure SSL is installed on your domain and set `SESSION_SECURE_COOKIE=true` in `.env`.

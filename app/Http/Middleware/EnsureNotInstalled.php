@@ -21,6 +21,11 @@ class EnsureNotInstalled
                 return $next($request);
             }
 
+            // Allow diagnostics inspection for authenticated administrators
+            if ($request->routeIs('install.diagnostics*') && $request->user()?->hasRole('admin')) {
+                return $next($request);
+            }
+
             if ($request->expectsJson()) {
                 return response()->json([
                     'message' => 'Application is already installed.',

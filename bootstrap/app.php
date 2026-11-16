@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAcademyAccess;
+use App\Http\Middleware\EnsureApplicationInstalled;
 use App\Http\Middleware\PreventWritesDuringRestore;
 use App\Http\Middleware\ResolveAcademyContext;
 use App\Http\Middleware\SecurityHeadersMiddleware;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(prepend: [
+            EnsureApplicationInstalled::class,
             PreventWritesDuringRestore::class,
         ], append: [
             SecurityHeadersMiddleware::class,

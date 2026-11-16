@@ -5,6 +5,9 @@ use Illuminate\Http\Request;
 
 define('LARAVEL_START', microtime(true));
 
+// Pre-flight bootstrap: catch missing vendor, auto-initialize .env and APP_KEY
+require __DIR__.'/../bootstrap/preflight.php';
+
 // Determine if the application is in maintenance mode...
 if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
     require $maintenance;

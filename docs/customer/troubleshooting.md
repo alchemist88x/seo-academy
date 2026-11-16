@@ -1,28 +1,38 @@
 # SEO Academy — Troubleshooting & Diagnostics
 
-This guide provides solutions to common issues that may arise during installation or day-to-day operation of **SEO Academy**.
+This guide provides practical solutions to common issues that may arise during installation or day-to-day operation of **SEO Academy**.
 
 ---
 
-## 1. Common Installation Issues
+## 1. Installation Troubleshooting
+
+### Issue: Pre-flight shows "Application Dependencies Required (vendor/ missing)"
+- **Cause:** You downloaded source files without pre-bundled Composer packages.
+- **Solution:**
+  - **Option 1 (Recommended):** Download the official prebuilt release archive (`seo-academy-v5.6.0.zip`) from the GitHub Releases page. This package includes the complete, tested production `vendor/` directory.
+  - **Option 2:** If your server has the Composer CLI available, click **Install Dependencies via Server Composer** on the pre-flight screen.
+  - **Option 3:** Run `composer install --no-dev --optimize-autoloader` locally on your development machine, then upload the `vendor/` directory to your server.
 
 ### Issue: "Attempt to write a readonly database" (SQLite)
-- **Cause:** The web server user does not have write permissions to the SQLite database file or its parent directory.
-- **Solution:** SQLite requires write access to **both** the database file and the parent folder to create temporary write-ahead log files (`.sqlite-wal` and `.sqlite-shm`):
+- **Cause:** The web server user lacks write permissions to `storage/app/private/` or the `database.sqlite` file.
+- **Solution:** SQLite requires write access to **both** the database file and its parent folder to create temporary journal and write-ahead log files (`.sqlite-wal`, `.sqlite-shm`):
   ```bash
   chmod -R 775 storage/app/private
-  chown -R www-data:www-data storage/app/private
   ```
+  On shared hosting, use the cPanel File Manager to ensure `storage/app/private/` has `755` or `775` permissions.
 
-### Issue: MySQL Error 1045 (Access denied for user)
-- **Cause:** Incorrect database credentials, or the MySQL user does not have permissions to connect from the current host.
-- **Solution:** Verify credentials in `.env`. Ensure your user has permissions granted on `localhost` or `127.0.0.1`:
-  ```sql
-  GRANT ALL PRIVILEGES ON seo_academy.* TO 'seo_user'@'127.0.0.1' IDENTIFIED BY 'your-password';
-  FLUSH PRIVILEGES;
-  ```
+### Issue: MySQL Error 1045 (Access denied for user) or Connection Refused
+- **Cause:** Incorrect database credentials, or the MySQL user does not have permission to connect from the current host.
+- **Solution:**
+  - Verify your database credentials by clicking **Test Connection** in Step 4 of the wizard.
+  - Ensure the database user has permissions on `127.0.0.1` or `localhost`:
+    ```sql
+    GRANT ALL PRIVILEGES ON seo_academy.* TO 'academy_user'@'127.0.0.1' IDENTIFIED BY 'your-password';
+    FLUSH PRIVILEGES;
+    ```
+  - Ensure the database exists prior to connecting.
 
-### Issue: Re-installation blocked / 403 Forbidden on `/install`
+### Issue: "Reinstallation is blocked" or 403 Forbidden on `/install`
 - **Cause:** An installation lock file exists at `storage/app/private/installed.lock`.
 - **Solution:** For security reasons, SEO Academy permanently locks the installer once completed. If you genuinely need to perform a fresh reinstall on a clean server, delete `storage/app/private/installed.lock`.
 
@@ -31,8 +41,8 @@ This guide provides solutions to common issues that may arise during installatio
 ## 2. General Runtime Issues
 
 ### Issue: Blank white screen or 500 Internal Server Error
-1. Check the Laravel error log located at `storage/logs/laravel.log`.
-2. Ensure `.env` exists and contains a valid 32-character base64 application key (`APP_KEY`). If missing, run:
+1. Check the application log located at `storage/logs/laravel.log`.
+2. Ensure `.env` exists and contains a valid 32-character base64 application key (`APP_KEY`). The installer creates this automatically, but if damaged, generate one:
    ```bash
    php artisan key:generate
    ```
@@ -45,47 +55,16 @@ This guide provides solutions to common issues that may arise during installatio
 - **Cause:** Session cookies are not being preserved across requests.
 - **Solution:**
   - If accessing your site over plain HTTP (without SSL), ensure `SESSION_SECURE_COOKIE=false` in `.env`.
-  - If your site is behind a cloud proxy (Cloudflare, AWS ALB), ensure trusted proxies are configured or verify your `APP_URL` in `.env` matches your full HTTPS URL (e.g. `APP_URL=https://your-academy.com`).
-
-### Issue: Livewire components or Alpine dropdowns not reacting
-- **Cause:** Outdated asset caches or missing Content Security Policy directives.
-- **Solution:**
-  1. Clear compiled asset caches:
-     ```bash
-     php artisan optimize:clear
-     ```
-  2. Ensure your web server does not inject conflicting custom CSP headers that block `'unsafe-eval'` or `'unsafe-inline'` required by Alpine.js and Livewire 4.
+  - If your site is behind a cloud proxy (Cloudflare, AWS ALB), ensure `APP_URL` in `.env` matches your full HTTPS URL (e.g. `APP_URL=https://your-academy.com`).
 
 ---
 
-## 3. PDF Generation & Memory Issues
+## 3. System Diagnostics Tool
 
-### Issue: Certificate PDF download fails with "Memory limit exhausted"
-- **Cause:** Dompdf requires adequate PHP memory to render high-resolution certificate templates.
-- **Solution:** Increase `memory_limit` in `php.ini` or `.env`:
-  ```ini
-  memory_limit = 256M
-  ```
+Visit `/install/diagnostics` to review:
+- Exact PHP runtime version and loaded extensions.
+- Database connection status and table counts.
+- Writable storage directories.
+- Package integrity.
 
----
-
-## 4. Diagnostic Commands
-
-SEO Academy provides several diagnostic commands to inspect system health:
-
-- **Check System Health:**
-  ```bash
-  php artisan system:health-sentinel
-  ```
-- **Clear All Application Caches:**
-  ```bash
-  php artisan optimize:clear
-  ```
-- **Inspect Scheduled Task Schedule:**
-  ```bash
-  php artisan schedule:list
-  ```
-- **Process Pending Certificates:**
-  ```bash
-  php artisan certificates:process-pdfs
-  ```
+Click **Download Sanitized Report (JSON)** to generate a sanitized diagnostic export suitable for technical review.

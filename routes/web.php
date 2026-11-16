@@ -319,13 +319,54 @@ Route::post('/invitations/{token}/accept', [InvitationAcceptanceController::clas
     ->middleware('throttle:10,1')
     ->name('invitations.accept.store');
 
-// Installation Wizard (guarded by installed.lock)
+// Zero-Terminal Installation Wizard (guarded by installed.lock and EnsureNotInstalled)
 Route::middleware(EnsureNotInstalled::class)
     ->prefix('install')
     ->name('install.')
     ->group(function () {
         Route::get('/', [InstallController::class, 'index'])->name('index');
-        Route::post('/test-connection', [InstallController::class, 'testConnection'])->name('test');
         Route::post('/database', [InstallController::class, 'store'])->name('store');
+        Route::post('/test-connection', [InstallController::class, 'testConnection'])->name('test');
+        Route::post('/reset', [InstallController::class, 'reset'])->name('reset');
+
+        // Step 1: Server Requirements
+        Route::get('/step/requirements', [InstallController::class, 'showRequirements'])->name('step.requirements');
+        Route::post('/step/requirements', [InstallController::class, 'storeRequirements'])->name('step.requirements.store');
+
+        // Step 2: Composer Dependencies
+        Route::get('/step/dependencies', [InstallController::class, 'showDependencies'])->name('step.dependencies');
+        Route::post('/step/dependencies', [InstallController::class, 'storeDependencies'])->name('step.dependencies.store');
+
+        // Step 3: Environment Setup
+        Route::get('/step/environment', [InstallController::class, 'showEnvironment'])->name('step.environment');
+        Route::post('/step/environment', [InstallController::class, 'storeEnvironment'])->name('step.environment.store');
+
+        // Step 4: Database Selection & Configuration
+        Route::get('/step/database', [InstallController::class, 'showDatabase'])->name('step.database');
+        Route::post('/step/database', [InstallController::class, 'storeDatabase'])->name('step.database.store');
+
+        // Step 5: Database Initialization & Migrations
+        Route::get('/step/migrations', [InstallController::class, 'showMigrations'])->name('step.migrations');
+        Route::post('/step/migrations', [InstallController::class, 'storeMigrations'])->name('step.migrations.store');
+
+        // Step 6: Filesystem Storage Setup
+        Route::get('/step/storage', [InstallController::class, 'showStorage'])->name('step.storage');
+        Route::post('/step/storage', [InstallController::class, 'storeStorage'])->name('step.storage.store');
+
+        // Step 7: Academy Configuration
+        Route::get('/step/academy', [InstallController::class, 'showAcademy'])->name('step.academy');
+        Route::post('/step/academy', [InstallController::class, 'storeAcademy'])->name('step.academy.store');
+
+        // Step 8: Administrator Creation
+        Route::get('/step/admin', [InstallController::class, 'showAdmin'])->name('step.admin');
+        Route::post('/step/admin', [InstallController::class, 'storeAdmin'])->name('step.admin.store');
+
+        // Step 9: Finalization
+        Route::get('/step/finalization', [InstallController::class, 'showFinalization'])->name('step.finalization');
+        Route::post('/step/finalization', [InstallController::class, 'storeFinalization'])->name('step.finalization.store');
+
+        // Completion & Diagnostics
         Route::get('/complete', [InstallController::class, 'complete'])->name('complete');
+        Route::get('/diagnostics', [InstallController::class, 'diagnostics'])->name('diagnostics');
+        Route::get('/diagnostics/download', [InstallController::class, 'downloadDiagnostics'])->name('diagnostics.download');
     });
