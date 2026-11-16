@@ -1,0 +1,101 @@
+# ==============================================================================
+# SEO Academy — Git Ignore Configuration
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Environment & Secrets (Explicitly Allow .env.example)
+# ------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.key
+/auth.json
+
+# ------------------------------------------------------------------------------
+# Dependency Management (Excluded per project git convention)
+# Note: composer.json and package.json remain tracked.
+# ------------------------------------------------------------------------------
+/vendor/
+/node_modules/
+/composer.lock
+/package-lock.json
+
+# ------------------------------------------------------------------------------
+# Databases & Backups (Preserve active dev DB and test databases locally only)
+# ------------------------------------------------------------------------------
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite.*
+*.bak
+*.bak_*
+/database/*.sqlite*
+/database/*.bak*
+
+# ------------------------------------------------------------------------------
+# Storage, Framework Caches & Logs
+# ------------------------------------------------------------------------------
+*.log
+/storage/logs/*
+!/storage/logs/.gitignore
+
+/storage/framework/cache/data/*
+!/storage/framework/cache/data/.gitignore
+/storage/framework/cache/locks/*
+!/storage/framework/cache/locks/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/testing/*
+!/storage/framework/testing/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/storage/pail
+
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+
+# ------------------------------------------------------------------------------
+# Customer Uploads & Private Storage
+# ------------------------------------------------------------------------------
+/storage/app/private/*
+!/storage/app/private/.gitignore
+!/storage/app/private/.htaccess
+/storage/app/private_media/*
+!/storage/app/private_media/.gitignore
+/storage/app/public/*
+!/storage/app/public/.gitignore
+/public/storage
+
+# ------------------------------------------------------------------------------
+# Frontend & Build Assets
+# Note: /public/build/ is intentionally TRACKED for production runtime
+# without Node.js. Hot-reload and dev manifests are ignored.
+# ------------------------------------------------------------------------------
+/public/hot
+/public/fonts-manifest.dev.json
+
+# ------------------------------------------------------------------------------
+# Distribution Archives & Scratch
+# ------------------------------------------------------------------------------
+*.zip
+/dist/staging*
+/scratch/
+
+# ------------------------------------------------------------------------------
+# IDE, OS & Test Artifacts
+# ------------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.phpunit.result.cache
+/.phpunit.cache
+/.idea
+/.vscode
+/.cursor
+/.codex
+/.nova
+/.zed
+.phpactor.json
+_ide_helper.php
+Homestead.json
+Homestead.yaml

@@ -1,0 +1,27 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('enrollments', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->foreignUuid('student_profile_id')->constrained('student_profiles')->cascadeOnDelete();
+            $table->foreignUuid('course_id')->constrained('courses')->cascadeOnDelete();
+            $table->date('enrolled_at')->nullable();
+            $table->string('status')->default('Active');
+            $table->timestamps();
+
+            $table->unique(['student_profile_id', 'course_id']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('enrollments');
+    }
+};

@@ -1,0 +1,52 @@
+{
+    "product_name": "SEO Academy",
+    "version": "5.4.0",
+    "release_channel": "commercial-self-hosted",
+    "build_timestamp": "2026-11-16T10:34:10+00:00",
+    "supported_php_versions": [
+        "8.3",
+        "8.4"
+    ],
+    "supported_databases": {
+        "SQLite": "3.35+",
+        "MySQL": "8.4+ InnoDB",
+        "MariaDB": "10.11+ InnoDB"
+    },
+    "required_extensions": [
+        "bcmath",
+        "ctype",
+        "curl",
+        "dom",
+        "fileinfo",
+        "filter",
+        "gd",
+        "hash",
+        "intl",
+        "json",
+        "mbstring",
+        "openssl",
+        "pcre",
+        "pdo",
+        "pdo_sqlite",
+        "pdo_mysql",
+        "session",
+        "tokenizer",
+        "xml",
+        "zip"
+    ],
+    "package": {
+        "filename": "seo-academy-v5.4.0.zip",
+        "size_bytes": 25789782,
+        "size_mb": 24.6,
+        "sha256": "2748f492ec2f7127e1fc8852cbda7a8c652f594ee89c0dead31b1083b2b25893"
+    },
+    "frontend_build": {
+        "engine": "Vite 8.0",
+        "css": "assets/app-BgRtVjd1.css",
+        "js": "assets/app-fstlTAiO.js",
+        "node_runtime_required_after_install": false
+    },
+    "migrations_count": 86,
+    "license": "Proprietary Commercial Self-Hosted License",
+    "license_notices_path": "docs/licenses/third-party-notices.md"
+}
