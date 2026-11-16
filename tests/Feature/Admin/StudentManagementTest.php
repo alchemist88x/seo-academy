@@ -12,6 +12,7 @@ use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -416,5 +417,266 @@ class StudentManagementTest extends TestCase
         $this->assertTrue($profile->active);
         $this->assertTrue($user->is_active);
         $this->assertNull($user->suspended_at);
+    }
+
+    public function test_student_proficiency_levels_beginner_intermediate_expert_and_normalization(): void
+    {
+        $academy = Academy::factory()->create(['slug' => 'prof-acad']);
+        $admin = $this->createAcademyMember($academy, 'admin');
+
+        $this->withSession([TenantContext::SESSION_KEY => $academy->id]);
+        app(TenantContext::class)->setAcademy($academy);
+
+        // 1. Create with Beginner
+        Livewire::actingAs($admin)
+            ->test(StudentsIndex::class)
+            ->set('name', 'Beginner Sam')
+            ->set('email', 'sam.beginner@example.com')
+            ->set('formProficiency', StudentProfile::PROFICIENCY_BEGINNER)
+            ->call('saveStudent')
+            ->assertHasNoErrors();
+
+        $sam = User::where('email', 'sam.beginner@example.com')->firstOrFail();
+        $samProfile = StudentProfile::where('user_id', $sam->id)->firstOrFail();
+        $this->assertSame('beginner', $samProfile->proficiency);
+        $this->assertSame('Beginner', $samProfile->proficiency_label);
+
+        // 2. Update to Intermediate
+        Livewire::actingAs($admin)
+            ->test(StudentsIndex::class)
+            ->call('openEditModal', $samProfile->id)
+            ->set('formProficiency', StudentProfile::PROFICIENCY_INTERMEDIATE)
+            ->call('saveStudent')
+            ->assertHasNoErrors();
+
+        $samProfile->refresh();
+        $this->assertSame('intermediate', $samProfile->proficiency);
+        $this->assertSame('Intermediate', $samProfile->proficiency_label);
+
+        // 3. Update to Expert
+        Livewire::actingAs($admin)
+            ->test(StudentsIndex::class)
+            ->call('openEditModal', $samProfile->id)
+            ->set('formProficiency', StudentProfile::PROFICIENCY_EXPERT)
+            ->call('saveStudent')
+            ->assertHasNoErrors();
+
+        $samProfile->refresh();
+        $this->assertSame('expert', $samProfile->proficiency);
+        $this->assertSame('Expert', $samProfile->proficiency_label);
+
+        // 4. Test invalid proficiency rejection
+        $service = app(StudentManagementService::class);
+        $this->expectException(ValidationException::class);
+        $service->createOrAttach($academy, [
+            'name' => 'Invalid Guy',
+            'email' => 'invalid@example.com',
+            'proficiency' => 'grandmaster',
+        ], $admin);
+    }
+
+    public function test_student_search_filtering_and_pagination(): void
+    {
+        $academy = Academy::factory()->create(['slug' => 'filter-acad']);
+        $admin = $this->createAcademyMember($academy, 'admin');
+
+        $this->withSession([TenantContext::SESSION_KEY => $academy->id]);
+        app(TenantContext::class)->setAcademy($academy);
+
+        // Create 20 students across various cohorts and proficiencies
+        for ($i = 1; $i <= 20; $i++) {
+            $user = User::factory()->create([
+                'name' => "Student $i",
+                'email' => "student{$i}@example.com",
+                'phone' => "+155500{$i}",
+                'is_active' => true,
+            ]);
+            $user->assignRole('student');
+            $user->academies()->attach($academy->id, ['id' => (string) Str::uuid(), 'role' => 'student', 'status' => 'active']);
+
+            $prof = ($i % 3 === 0) ? 'expert' : (($i % 2 === 0) ? 'intermediate' : 'beginner');
+            $batch = ($i <= 10) ? 'Cohort-A' : 'Cohort-B';
+
+            StudentProfile::create([
+                'user_id' => $user->id,
+                'academy_id' => $academy->id,
+                'student_code' => sprintf('STU-%03d', $i),
+                'batch' => $batch,
+                'proficiency' => $prof,
+                'level' => ucfirst($prof),
+                'active' => true,
+            ]);
+        }
+
+        // Test filter by proficiency
+        Livewire::actingAs($admin)
+            ->test(StudentsIndex::class)
+            ->set('proficiency', 'expert')
+            ->assertSee('STU-003')
+            ->assertSee('STU-006')
+            ->assertDontSee('STU-001');
+
+        // Test filter by batch
+        Livewire::actingAs($admin)
+            ->test(StudentsIndex::class)
+            ->set('batch', 'Cohort-B')
+            ->assertSee('STU-011')
+            ->assertDontSee('STU-002');
+
+        // Test pagination limit
+        Livewire::actingAs($admin)
+            ->test(StudentsIndex::class)
+            ->set('perPage', 15)
+            ->assertSee('STU-001')
+            ->assertSee('STU-015');
+    }
+
+    public function test_csv_export_endpoint_and_streamed_download(): void
+    {
+        $academy = Academy::factory()->create(['slug' => 'export-acad']);
+        $admin = $this->createAcademyMember($academy, 'admin');
+
+        $user = User::factory()->create([
+            'name' => 'Export Candidate',
+            'email' => 'export.candidate@example.com',
+            'phone' => '+15559988',
+            'is_active' => true,
+        ]);
+        $user->assignRole('student');
+        $user->academies()->attach($academy->id, ['id' => (string) Str::uuid(), 'role' => 'student', 'status' => 'active']);
+
+        StudentProfile::create([
+            'user_id' => $user->id,
+            'academy_id' => $academy->id,
+            'student_code' => 'EXP-001',
+            'batch' => 'Cohort 2026-X',
+            'proficiency' => 'expert',
+            'level' => 'Expert',
+            'active' => true,
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->withSession([TenantContext::SESSION_KEY => $academy->id])
+            ->get(route('admin.students.export'));
+
+        $response->assertStatus(200);
+        $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+
+        $streamedContent = $response->streamedContent();
+        $this->assertStringContainsString('EXP-001', $streamedContent);
+        $this->assertStringContainsString('export.candidate@example.com', $streamedContent);
+        $this->assertStringContainsString('Expert', $streamedContent);
+        $this->assertStringContainsString('Cohort 2026-X', $streamedContent);
+    }
+
+    public function test_student_view_modal_loads_profile_and_details(): void
+    {
+        $academy = Academy::factory()->create(['slug' => 'view-acad']);
+        $admin = $this->createAcademyMember($academy, 'admin');
+
+        $user = User::factory()->create([
+            'name' => 'Viewable Student',
+            'email' => 'viewable@example.com',
+            'phone' => '+15553322',
+            'is_active' => true,
+        ]);
+        $user->assignRole('student');
+        $user->academies()->attach($academy->id, ['id' => (string) Str::uuid(), 'role' => 'student', 'status' => 'active']);
+
+        $profile = StudentProfile::create([
+            'user_id' => $user->id,
+            'academy_id' => $academy->id,
+            'student_code' => 'VIEW-001',
+            'batch' => 'Spring 2026',
+            'proficiency' => 'intermediate',
+            'level' => 'Intermediate',
+            'notes' => 'Looking to upskill in technical SEO',
+            'active' => true,
+        ]);
+
+        $this->withSession([TenantContext::SESSION_KEY => $academy->id]);
+        app(TenantContext::class)->setAcademy($academy);
+
+        Livewire::actingAs($admin)
+            ->test(StudentsIndex::class)
+            ->call('openViewModal', $profile->id)
+            ->assertSet('viewingStudent.id', $profile->id)
+            ->assertDispatched('open-modal', 'student-view-modal');
+    }
+
+    public function test_student_suspension_blocks_protected_learning_access(): void
+    {
+        $academy = Academy::factory()->create(['slug' => 'susp-acad']);
+
+        $user = User::factory()->create(['is_active' => true]);
+        $user->assignRole('student');
+        $user->academies()->attach($academy->id, ['id' => (string) Str::uuid(), 'role' => 'student', 'status' => 'active']);
+
+        $profile = StudentProfile::create([
+            'user_id' => $user->id,
+            'academy_id' => $academy->id,
+            'student_code' => 'SUSP-001',
+            'proficiency' => 'beginner',
+            'level' => 'Beginner',
+            'active' => true,
+        ]);
+
+        // Active student can access student dashboard
+        $this->actingAs($user)
+            ->withSession([TenantContext::SESSION_KEY => $academy->id])
+            ->get('/student/dashboard')
+            ->assertStatus(200);
+
+        // Suspend student
+        $service = app(StudentManagementService::class);
+        $service->toggleActive($profile);
+
+        $user->refresh();
+        $profile->refresh();
+        $this->assertFalse($profile->active);
+        $this->assertFalse($user->is_active);
+
+        // Suspended student is blocked with HTTP 403 on protected route
+        $this->actingAs($user)
+            ->withSession([TenantContext::SESSION_KEY => $academy->id])
+            ->get('/student/dashboard')
+            ->assertStatus(403);
+    }
+
+    public function test_csv_import_idempotency_lock_and_rejected_rows_export(): void
+    {
+        $academy = Academy::factory()->create(['slug' => 'idemp-acad']);
+        $admin = $this->createAcademyMember($academy, 'admin');
+
+        $this->withSession([TenantContext::SESSION_KEY => $academy->id]);
+        app(TenantContext::class)->setAcademy($academy);
+
+        $csvContent = implode("\n", [
+            'name,email,phone,student_code,batch,proficiency,enrolled_at,notes',
+            'Valid Unique,unique.import@example.com,+15551122,UNIQ-001,Cohort 2026,beginner,2026-02-01,Valid',
+            'Malformed Email,invalid-email-address,+15551133,UNIQ-002,Cohort 2026,intermediate,2026-02-01,Error',
+        ]);
+
+        $file = UploadedFile::fake()->createWithContent('students.csv', $csvContent);
+
+        $component = Livewire::actingAs($admin)
+            ->test(StudentsIndex::class)
+            ->set('csvFile', $file)
+            ->call('previewCsvImport')
+            ->assertHasNoErrors();
+
+        // 1. Download rejected rows CSV
+        $rejectedResponse = $component->call('downloadRejectedRows');
+        $this->assertNotNull($rejectedResponse);
+
+        // 2. Confirm import first time
+        $component->call('confirmCsvImport')
+            ->assertHasNoErrors();
+
+        $this->assertSame(1, User::where('email', 'unique.import@example.com')->count());
+
+        // 3. Confirm import second time with same token (idempotency prevents re-processing)
+        $component->call('confirmCsvImport');
+        $this->assertSame(1, User::where('email', 'unique.import@example.com')->count());
     }
 }

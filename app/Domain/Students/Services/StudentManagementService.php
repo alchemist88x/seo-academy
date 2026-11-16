@@ -9,6 +9,7 @@ use App\Domain\Students\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -339,6 +340,13 @@ class StudentManagementService
 
             return $profile->fresh(['user', 'academy']);
         });
+    }
+
+    public function toggleActive(StudentProfile $profile, ?User $actor = null): StudentProfile
+    {
+        $actor = $actor ?? Auth::user() ?? $profile->user;
+
+        return $this->setActive($profile, ! $profile->active, $actor);
     }
 
     public function setActive(StudentProfile $profile, bool $active, User $actor): StudentProfile
@@ -706,7 +714,7 @@ class StudentManagementService
                 $actor,
                 'students.exported_csv',
                 StudentProfile::class,
-                null,
+                (string) $academy->getKey(),
                 ['filters' => $filters],
             );
         }
