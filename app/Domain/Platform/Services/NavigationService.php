@@ -96,7 +96,14 @@ class NavigationService
                     'route' => 'admin.courses.index',
                     'url' => route('admin.courses.index'),
                     'icon' => 'book-open',
-                    'active' => request()->routeIs('admin.courses.*'),
+                    'active' => request()->routeIs('admin.courses.*') && ! request()->query('manage_categories'),
+                ],
+                [
+                    'label' => 'Course Categories',
+                    'route' => 'admin.courses.index',
+                    'url' => route('admin.courses.index', ['manage_categories' => 1]),
+                    'icon' => 'folder',
+                    'active' => request()->routeIs('admin.courses.*') && (bool) request()->query('manage_categories'),
                 ],
                 [
                     'label' => 'Enrollments',

@@ -2,7 +2,15 @@
     <x-page-header
         title="Certificates & Credentials"
         subtitle="Manage issued academic certificates, customize templates, and handle credential verifications."
-    />
+    >
+        @if ($isAdmin)
+            <x-slot:actions>
+                <x-button variant="primary" wire:click="openIssueModal">
+                    + Issue Certificate
+                </x-button>
+            </x-slot:actions>
+        @endif
+    </x-page-header>
 
     {{-- Feedback Alerts --}}
     @if (session()->has('success'))
@@ -292,6 +300,73 @@
                 <div class="flex justify-end pt-3 border-t border-border-default">
                     <button type="button" wire:click="closeAuditHistory" class="btn btn-secondary btn-sm">
                         Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Manual Issue Certificate Modal --}}
+    @if ($showIssueModal)
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div class="bg-surface-primary border border-border-default rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-border-default">
+                    <h3 class="text-lg font-bold text-text-primary">Issue New Certificate</h3>
+                    <button type="button" wire:click="$set('showIssueModal', false)" class="text-text-muted hover:text-text-primary">&times;</button>
+                </div>
+
+                <div class="space-y-4">
+                    @error('issue_general')
+                        <div class="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold">
+                            {{ $message }}
+                        </div>
+                    @enderror
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-text-muted mb-1">
+                            Completed Student Enrollment *
+                        </label>
+                        @if ($eligibleEnrollments->isEmpty())
+                            <p class="text-xs text-text-secondary italic p-3 rounded-lg bg-surface-secondary border border-border-default">
+                                No eligible completed enrollments currently awaiting certificates. Students must complete their course and receive a passing grade before a certificate can be issued.
+                            </p>
+                        @else
+                            <select wire:model="issueEnrollmentId" class="w-full text-sm rounded-lg border-border-default bg-surface-primary text-text-primary">
+                                <option value="">Select a student enrollment...</option>
+                                @foreach ($eligibleEnrollments as $enr)
+                                    <option value="{{ $enr->id }}">
+                                        {{ $enr->studentProfile?->user?->name ?? 'Student' }} — {{ $enr->course?->title ?? 'Course' }} (Completed {{ $enr->completed_at?->format('M d, Y') ?? 'Recently' }})
+                                    </option>
+                                @endforeach
+                            </select>
+                        @endif
+                        @error('issueEnrollmentId') <span class="text-xs text-rose-500">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-text-muted mb-1">
+                            Certificate Template Design *
+                        </label>
+                        <select wire:model="issueTemplate" class="w-full text-sm rounded-lg border-border-default bg-surface-primary text-text-primary">
+                            <option value="classic">Classic (Double Border & Gold Accent)</option>
+                            <option value="modern">Modern Minimalist (Clean Indigo & Dark Header)</option>
+                            <option value="minimalist">Clean & Minimal (Emerald Accent)</option>
+                        </select>
+                        @error('issueTemplate') <span class="text-xs text-rose-500">{{ $message }}</span> @enderror
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-3 border-t border-border-default">
+                    <button type="button" wire:click="$set('showIssueModal', false)" class="btn btn-secondary btn-sm">
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        wire:click="issueCertificateForEnrollment"
+                        :disabled="$eligibleEnrollments->isEmpty()"
+                        class="btn btn-primary btn-sm"
+                    >
+                        Issue Certificate
                     </button>
                 </div>
             </div>

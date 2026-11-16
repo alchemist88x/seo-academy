@@ -15,7 +15,7 @@
         {{-- Mobile Sidebar Drawer Trigger --}}
         <button
             type="button"
-            @click="$store.sidebar.toggleMobile()"
+            @click="$store?.sidebar?.toggleMobile ? $store.sidebar.toggleMobile() : null"
             class="md:hidden p-2 -ml-2 rounded-lg text-text-secondary hover:bg-border-muted hover:text-text-primary transition-colors"
             aria-label="Open navigation menu"
         >
@@ -47,10 +47,10 @@
                 title="Switch theme"
                 aria-label="Theme switcher"
             >
-                <svg x-show="!$store.theme.isDark" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg x-show="!$store?.theme?.isDark" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
                 </svg>
-                <svg x-show="$store.theme.isDark" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display: none;">
+                <svg x-show="$store?.theme?.isDark" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display: none;">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
                 </svg>
             </button>
@@ -64,27 +64,27 @@
             >
                 <button
                     type="button"
-                    @click="$store.theme.set('light'); open = false"
+                    @click="$store?.theme?.set ? $store.theme.set('light') : null; open = false"
                     class="w-full px-3 py-1.5 text-left text-sm flex items-center justify-between hover:bg-border-muted text-text-primary"
                 >
                     <span>Light</span>
-                    <span x-show="$store.theme.mode === 'light'" class="text-primary-600 font-bold">&check;</span>
+                    <span x-show="$store?.theme?.mode === 'light'" class="text-primary-600 font-bold">&check;</span>
                 </button>
                 <button
                     type="button"
-                    @click="$store.theme.set('dark'); open = false"
+                    @click="$store?.theme?.set ? $store.theme.set('dark') : null; open = false"
                     class="w-full px-3 py-1.5 text-left text-sm flex items-center justify-between hover:bg-border-muted text-text-primary"
                 >
                     <span>Dark</span>
-                    <span x-show="$store.theme.mode === 'dark'" class="text-primary-600 font-bold">&check;</span>
+                    <span x-show="$store?.theme?.mode === 'dark'" class="text-primary-600 font-bold">&check;</span>
                 </button>
                 <button
                     type="button"
-                    @click="$store.theme.set('system'); open = false"
+                    @click="$store?.theme?.set ? $store.theme.set('system') : null; open = false"
                     class="w-full px-3 py-1.5 text-left text-sm flex items-center justify-between hover:bg-border-muted text-text-primary"
                 >
                     <span>System</span>
-                    <span x-show="$store.theme.mode === 'system'" class="text-primary-600 font-bold">&check;</span>
+                    <span x-show="$store?.theme?.mode === 'system'" class="text-primary-600 font-bold">&check;</span>
                 </button>
             </div>
         </div>

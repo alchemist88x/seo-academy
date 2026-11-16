@@ -10,103 +10,201 @@
         $dbHost = old('host', $state['db_config']['host'] ?? '127.0.0.1');
         $dbPort = old('port', $state['db_config']['port'] ?? '3306');
         $dbName = old('database', $state['db_config']['database'] ?? 'seo_academy');
-        $dbUser = old('username', $state['db_config']['username'] ?? 'seo_academy_user');
+        $dbUser = old('username', $state['db_config']['username'] ?? 'root');
     @endphp
 
-    <div
-        id="db-wizard-container"
-        class="space-y-6"
-        x-data="{
-            driver: @js($selectedDriver),
-            hostingType: 'local',
-            host: @js($dbHost),
-            port: @js($dbPort),
-            database: @js($dbName),
-            username: @js($dbUser),
-            password: '',
-            confirmSwitch: false,
-            testing: false,
-            testResult: null,
+    <script>
+        // Define global functions immediately before DOM rendering so inline handlers never fail
+        window.switchDatabaseEngine = function (driver) {
+            const isMysql = (driver === 'mysql');
+            const sqliteRadio = document.getElementById('staged-engine-sqlite');
+            const mysqlRadio = document.getElementById('staged-engine-mysql');
+            const sqliteCard = document.getElementById('card-engine-sqlite');
+            const mysqlCard = document.getElementById('card-engine-mysql');
+            const sqlitePanel = document.getElementById('sqlite-config-panel');
+            const mysqlPanel = document.getElementById('mysql-config-panel');
+            const sqliteSelected = document.getElementById('sqlite-status-selected');
+            const sqliteUnselected = document.getElementById('sqlite-status-unselected');
+            const mysqlSelected = document.getElementById('mysql-status-selected');
+            const mysqlUnselected = document.getElementById('mysql-status-unselected');
 
-            selectDriver(d) {
-                this.driver = d;
-                this.testResult = null;
-                if (typeof window.syncDatabaseDriver === 'function') {
-                    window.syncDatabaseDriver(d);
+            const activeClasses = ['border-primary-500', 'bg-primary-500/10', 'ring-2', 'ring-primary-500/30'];
+            const inactiveClasses = ['border-border-default', 'bg-surface-elevated/40'];
+
+            if (isMysql) {
+                if (mysqlRadio) mysqlRadio.checked = true;
+                if (sqliteRadio) sqliteRadio.checked = false;
+
+                if (mysqlCard) {
+                    inactiveClasses.forEach(c => mysqlCard.classList.remove(c));
+                    activeClasses.forEach(c => mysqlCard.classList.add(c));
                 }
-            },
-
-            selectHostingType(t) {
-                this.hostingType = t;
-                this.testResult = null;
-                if (typeof window.syncHostingType === 'function') {
-                    window.syncHostingType(t);
+                if (sqliteCard) {
+                    activeClasses.forEach(c => sqliteCard.classList.remove(c));
+                    inactiveClasses.forEach(c => sqliteCard.classList.add(c));
                 }
-            },
 
-            async testConnection() {
-                this.testing = true;
-                this.testResult = null;
+                if (mysqlPanel) {
+                    mysqlPanel.style.removeProperty('display');
+                    mysqlPanel.style.display = 'block';
+                }
+                if (sqlitePanel) {
+                    sqlitePanel.style.display = 'none';
+                }
 
-                const currentDriver = document.querySelector('input[name=\'driver\']:checked')?.value || this.driver;
-                const hostVal = document.getElementById('db_host')?.value || this.host;
-                const portVal = document.getElementById('db_port')?.value || this.port;
-                const dbVal = document.getElementById('db_database')?.value || this.database;
-                const userVal = document.getElementById('db_username')?.value || this.username;
-                const passVal = document.getElementById('db_password')?.value || this.password;
+                if (mysqlSelected) mysqlSelected.style.display = 'inline';
+                if (mysqlUnselected) mysqlUnselected.style.display = 'none';
+                if (sqliteSelected) sqliteSelected.style.display = 'none';
+                if (sqliteUnselected) sqliteUnselected.style.display = 'inline';
 
-                const payload = currentDriver === 'sqlite'
-                    ? { driver: 'sqlite' }
-                    : {
-                        driver: 'mysql',
-                        host: hostVal,
-                        port: portVal,
-                        database: dbVal,
-                        username: userVal,
-                        password: passVal,
-                    };
+                // Populate defaults if fields are empty
+                const hostEl = document.getElementById('db_host');
+                const portEl = document.getElementById('db_port');
+                const nameEl = document.getElementById('db_database');
+                const userEl = document.getElementById('db_username');
+                if (hostEl) {
+                    if (!hostEl.value) hostEl.value = '127.0.0.1';
+                    hostEl.setAttribute('required', 'required');
+                }
+                if (portEl && !portEl.value) portEl.value = '3306';
+                if (nameEl) {
+                    if (!nameEl.value) nameEl.value = 'seo_academy';
+                    nameEl.setAttribute('required', 'required');
+                }
+                if (userEl) {
+                    if (!userEl.value) userEl.value = 'root';
+                    userEl.setAttribute('required', 'required');
+                }
+            } else {
+                if (sqliteRadio) sqliteRadio.checked = true;
+                if (mysqlRadio) mysqlRadio.checked = false;
 
-                try {
-                    const response = await fetch('{{ route('install.test') }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '',
-                        },
-                        body: JSON.stringify(payload),
-                    });
+                if (sqliteCard) {
+                    inactiveClasses.forEach(c => sqliteCard.classList.remove(c));
+                    activeClasses.forEach(c => sqliteCard.classList.add(c));
+                }
+                if (mysqlCard) {
+                    activeClasses.forEach(c => mysqlCard.classList.remove(c));
+                    inactiveClasses.forEach(c => mysqlCard.classList.add(c));
+                }
 
-                    const data = await response.json();
-                    this.testResult = {
-                        ok: Boolean(data.ok),
-                        message: data.message || (response.ok ? 'Connection successful.' : 'Connection check failed.'),
-                    };
-                } catch (err) {
-                    this.testResult = {
-                        ok: false,
-                        message: 'Unable to reach the installer test endpoint. Please check network connectivity and try again.',
-                    };
-                } finally {
-                    this.testing = false;
-                    const testResultEl = document.getElementById('client-test-result');
-                    if (testResultEl && this.testResult) {
-                        testResultEl.style.display = 'block';
-                        const msgEl = document.getElementById('client-test-message');
-                        const statusEl = document.getElementById('client-test-status');
-                        const boxEl = document.getElementById('client-test-box');
-                        if (msgEl) msgEl.textContent = this.testResult.message;
-                        if (statusEl) statusEl.textContent = this.testResult.ok ? 'Verified' : 'Failed';
-                        if (boxEl) {
-                            boxEl.className = this.testResult.ok
-                                ? 'p-3 rounded-lg text-xs flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-                                : 'p-3 rounded-lg text-xs flex items-center justify-between bg-rose-500/10 border border-rose-500/30 text-rose-400';
-                        }
+                if (sqlitePanel) {
+                    sqlitePanel.style.removeProperty('display');
+                    sqlitePanel.style.display = 'block';
+                }
+                if (mysqlPanel) {
+                    mysqlPanel.style.display = 'none';
+                }
+
+                if (sqliteSelected) sqliteSelected.style.display = 'inline';
+                if (sqliteUnselected) sqliteUnselected.style.display = 'none';
+                if (mysqlSelected) mysqlSelected.style.display = 'none';
+                if (mysqlUnselected) mysqlUnselected.style.display = 'inline';
+
+                const hostEl = document.getElementById('db_host');
+                const nameEl = document.getElementById('db_database');
+                const userEl = document.getElementById('db_username');
+                if (hostEl) hostEl.removeAttribute('required');
+                if (nameEl) nameEl.removeAttribute('required');
+                if (userEl) userEl.removeAttribute('required');
+            }
+        };
+
+        window.switchHostingType = function (type) {
+            const types = ['local', 'rds', 'remote', 'custom'];
+            const hostInput = document.getElementById('db_host');
+            const portInput = document.getElementById('db_port');
+            const guide = document.getElementById('cloudpanel-guide');
+
+            types.forEach(t => {
+                const btn = document.getElementById('btn-hosting-' + t);
+                if (btn) {
+                    if (t === type) {
+                        btn.className = 'p-3 rounded-lg border text-left text-xs transition-all border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/20 font-bold';
+                    } else {
+                        btn.className = 'p-3 rounded-lg border text-left text-xs transition-all border-border-default bg-surface-card hover:border-border-hover';
                     }
                 }
+            });
+
+            if (type === 'local') {
+                if (hostInput) hostInput.value = '127.0.0.1';
+                if (portInput) portInput.value = '3306';
+                if (guide) guide.style.display = 'block';
+            } else if (type === 'rds' || type === 'remote') {
+                if (hostInput && hostInput.value === '127.0.0.1') {
+                    hostInput.value = '';
+                }
+                if (portInput) portInput.value = '3306';
+                if (guide) guide.style.display = 'none';
+            } else {
+                if (guide) guide.style.display = 'none';
             }
-        }"
-    >
+        };
+
+        window.testDatabaseConnection = async function () {
+            const idleEl = document.getElementById('test-btn-idle');
+            const loadingEl = document.getElementById('test-btn-loading');
+            const testResultEl = document.getElementById('client-test-result');
+            const boxEl = document.getElementById('client-test-box');
+            const msgEl = document.getElementById('client-test-message');
+            const statusEl = document.getElementById('client-test-status');
+
+            if (idleEl) idleEl.style.display = 'none';
+            if (loadingEl) loadingEl.style.display = 'inline';
+
+            const isMysqlChecked = document.getElementById('staged-engine-mysql')?.checked;
+            const driver = isMysqlChecked ? 'mysql' : 'sqlite';
+
+            const payload = (driver === 'sqlite')
+                ? { driver: 'sqlite' }
+                : {
+                    driver: 'mysql',
+                    host: document.getElementById('db_host')?.value || '127.0.0.1',
+                    port: document.getElementById('db_port')?.value || '3306',
+                    database: document.getElementById('db_database')?.value || 'seo_academy',
+                    username: document.getElementById('db_username')?.value || 'root',
+                    password: document.getElementById('db_password')?.value || '',
+                };
+
+            try {
+                const response = await fetch('{{ route('install.test') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '',
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                const data = await response.json();
+                const isOk = Boolean(data.ok);
+                const message = data.message || (response.ok ? 'Connection successful.' : 'Connection check failed.');
+
+                if (testResultEl) testResultEl.style.display = 'block';
+                if (msgEl) msgEl.textContent = message;
+                if (statusEl) statusEl.textContent = isOk ? 'Verified' : 'Failed';
+                if (boxEl) {
+                    boxEl.className = isOk
+                        ? 'p-3 rounded-lg text-xs flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold'
+                        : 'p-3 rounded-lg text-xs flex items-center justify-between bg-rose-500/10 border border-rose-500/30 text-rose-400 font-semibold';
+                }
+            } catch (err) {
+                if (testResultEl) testResultEl.style.display = 'block';
+                if (msgEl) msgEl.textContent = 'Unable to reach the installer test endpoint. Please check network connectivity and try again.';
+                if (statusEl) statusEl.textContent = 'Failed';
+                if (boxEl) {
+                    boxEl.className = 'p-3 rounded-lg text-xs flex items-center justify-between bg-rose-500/10 border border-rose-500/30 text-rose-400 font-semibold';
+                }
+            } finally {
+                if (idleEl) idleEl.style.display = 'inline';
+                if (loadingEl) loadingEl.style.display = 'none';
+            }
+        };
+    </script>
+
+    <div id="db-wizard-container" class="space-y-6">
         <div>
             <h2 class="text-lg font-bold text-text-primary">Choose Your Database Engine</h2>
             <p class="text-xs text-text-secondary mt-1">
@@ -126,16 +224,13 @@
                 </div>
             @enderror
 
-            {{-- Driver Switch Cards (Semantic Radio Group) --}}
+            {{-- Driver Switch Cards (Interactive Radio Group) --}}
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" role="radiogroup" aria-label="Database Engine Selection">
                 {{-- SQLite Card --}}
-                <label
+                <div
                     id="card-engine-sqlite"
-                    for="staged-engine-sqlite"
-                    onclick="window.syncDatabaseDriver('sqlite')"
-                    @click="selectDriver('sqlite')"
+                    onclick="window.switchDatabaseEngine('sqlite')"
                     class="p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between {{ ! $isMysql ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover' }}"
-                    :class="driver === 'sqlite' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover'"
                 >
                     <div>
                         <div class="flex items-center justify-between mb-2">
@@ -145,9 +240,7 @@
                                     type="radio"
                                     name="driver"
                                     value="sqlite"
-                                    x-model="driver"
-                                    onchange="window.syncDatabaseDriver('sqlite')"
-                                    @change="selectDriver('sqlite')"
+                                    onchange="window.switchDatabaseEngine('sqlite')"
                                     {{ ! $isMysql ? 'checked' : '' }}
                                     class="w-4 h-4 text-primary-600 focus:ring-primary-500 border-border-default cursor-pointer"
                                 />
@@ -163,19 +256,16 @@
 
                     <div class="mt-3 pt-2 border-t border-border-default/60 flex items-center justify-between text-xs">
                         <span class="text-[11px] text-text-muted">Single-file database</span>
-                        <span id="sqlite-status-selected" class="text-primary-600 dark:text-primary-400 font-bold text-xs" style="{{ $isMysql ? 'display: none;' : '' }}" x-show="driver === 'sqlite'">Selected</span>
-                        <span id="sqlite-status-unselected" class="text-text-muted text-xs" style="{{ ! $isMysql ? 'display: none;' : '' }}" x-show="driver !== 'sqlite'">Click to select</span>
+                        <span id="sqlite-status-selected" class="text-primary-600 dark:text-primary-400 font-bold text-xs" style="{{ $isMysql ? 'display: none;' : '' }}">Selected</span>
+                        <span id="sqlite-status-unselected" class="text-text-muted text-xs" style="{{ ! $isMysql ? 'display: none;' : '' }}">Click to select</span>
                     </div>
-                </label>
+                </div>
 
                 {{-- MySQL Card --}}
-                <label
+                <div
                     id="card-engine-mysql"
-                    for="staged-engine-mysql"
-                    onclick="window.syncDatabaseDriver('mysql')"
-                    @click="selectDriver('mysql')"
+                    onclick="window.switchDatabaseEngine('mysql')"
                     class="p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between {{ $isMysql ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover' }}"
-                    :class="driver === 'mysql' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/30' : 'border-border-default bg-surface-elevated/40 hover:border-border-hover'"
                 >
                     <div>
                         <div class="flex items-center justify-between mb-2">
@@ -185,9 +275,7 @@
                                     type="radio"
                                     name="driver"
                                     value="mysql"
-                                    x-model="driver"
-                                    onchange="window.syncDatabaseDriver('mysql')"
-                                    @change="selectDriver('mysql')"
+                                    onchange="window.switchDatabaseEngine('mysql')"
                                     {{ $isMysql ? 'checked' : '' }}
                                     class="w-4 h-4 text-primary-600 focus:ring-primary-500 border-border-default cursor-pointer"
                                 />
@@ -203,17 +291,16 @@
 
                     <div class="mt-3 pt-2 border-t border-border-default/60 flex items-center justify-between text-xs">
                         <span class="text-[11px] text-text-muted">High concurrency engine</span>
-                        <span id="mysql-status-selected" class="text-primary-600 dark:text-primary-400 font-bold text-xs" style="{{ ! $isMysql ? 'display: none;' : '' }}" x-show="driver === 'mysql'">Selected</span>
-                        <span id="mysql-status-unselected" class="text-text-muted text-xs" style="{{ $isMysql ? 'display: none;' : '' }}" x-show="driver !== 'mysql'">Click to select</span>
+                        <span id="mysql-status-selected" class="text-primary-600 dark:text-primary-400 font-bold text-xs" style="{{ ! $isMysql ? 'display: none;' : '' }}">Selected</span>
+                        <span id="mysql-status-unselected" class="text-text-muted text-xs" style="{{ $isMysql ? 'display: none;' : '' }}">Click to select</span>
                     </div>
-                </label>
+                </div>
             </div>
 
             {{-- SQLite Details --}}
             <div
                 id="sqlite-config-panel"
                 style="{{ $isMysql ? 'display: none;' : '' }}"
-                x-show="driver === 'sqlite'"
                 class="p-4 rounded-lg bg-surface-elevated/40 border border-border-default space-y-3"
             >
                 <span class="text-xs font-bold text-text-primary block">SQLite Database Configuration</span>
@@ -231,7 +318,6 @@
             <div
                 id="mysql-config-panel"
                 style="{{ ! $isMysql ? 'display: none;' : '' }}"
-                x-show="driver === 'mysql'"
                 class="space-y-4 p-5 rounded-xl bg-surface-elevated/40 border border-border-default"
             >
                 {{-- Hosting Type Selector --}}
@@ -241,10 +327,8 @@
                         <button
                             type="button"
                             id="btn-hosting-local"
-                            onclick="window.syncHostingType('local')"
-                            @click="selectHostingType('local')"
+                            onclick="window.switchHostingType('local')"
                             class="p-3 rounded-lg border text-left text-xs transition-all border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/20 font-bold"
-                            :class="hostingType === 'local' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/20 font-bold' : 'border-border-default bg-surface-card hover:border-border-hover'"
                         >
                             <span class="block text-text-primary font-bold">Local MySQL</span>
                             <span class="text-[10px] text-text-muted">CloudPanel / VPS</span>
@@ -253,10 +337,8 @@
                         <button
                             type="button"
                             id="btn-hosting-rds"
-                            onclick="window.syncHostingType('rds')"
-                            @click="selectHostingType('rds')"
+                            onclick="window.switchHostingType('rds')"
                             class="p-3 rounded-lg border text-left text-xs transition-all border-border-default bg-surface-card hover:border-border-hover"
-                            :class="hostingType === 'rds' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/20 font-bold' : 'border-border-default bg-surface-card hover:border-border-hover'"
                         >
                             <span class="block text-text-primary font-bold">Amazon RDS</span>
                             <span class="text-[10px] text-text-muted">AWS Database</span>
@@ -265,10 +347,8 @@
                         <button
                             type="button"
                             id="btn-hosting-remote"
-                            onclick="window.syncHostingType('remote')"
-                            @click="selectHostingType('remote')"
+                            onclick="window.switchHostingType('remote')"
                             class="p-3 rounded-lg border text-left text-xs transition-all border-border-default bg-surface-card hover:border-border-hover"
-                            :class="hostingType === 'remote' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/20 font-bold' : 'border-border-default bg-surface-card hover:border-border-hover'"
                         >
                             <span class="block text-text-primary font-bold">Remote Server</span>
                             <span class="text-[10px] text-text-muted">External Host</span>
@@ -277,10 +357,8 @@
                         <button
                             type="button"
                             id="btn-hosting-custom"
-                            onclick="window.syncHostingType('custom')"
-                            @click="selectHostingType('custom')"
+                            onclick="window.switchHostingType('custom')"
                             class="p-3 rounded-lg border text-left text-xs transition-all border-border-default bg-surface-card hover:border-border-hover"
-                            :class="hostingType === 'custom' ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/20 font-bold' : 'border-border-default bg-surface-card hover:border-border-hover'"
                         >
                             <span class="block text-text-primary font-bold">Custom</span>
                             <span class="text-[10px] text-text-muted">Manual Setup</span>
@@ -292,7 +370,6 @@
                 <div
                     id="cloudpanel-guide"
                     class="p-3.5 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-text-secondary space-y-2"
-                    x-show="hostingType === 'local'"
                 >
                     <span class="font-bold text-xs text-blue-900 dark:text-blue-200 block">CloudPanel Setup Guide</span>
                     <ol class="list-decimal list-inside space-y-1 text-[11px] text-text-secondary">
@@ -305,24 +382,22 @@
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="sm:col-span-2">
-                        <label class="block text-xs font-medium text-text-secondary mb-1">Database Server Host *</label>
+                        <label for="db_host" class="block text-xs font-medium text-text-secondary mb-1">Database Server Host *</label>
                         <input
                             type="text"
                             id="db_host"
                             name="host"
-                            x-model="host"
                             value="{{ $dbHost }}"
                             placeholder="127.0.0.1"
                             class="input input-sm w-full text-xs font-mono"
                         >
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-text-secondary mb-1">Port *</label>
+                        <label for="db_port" class="block text-xs font-medium text-text-secondary mb-1">Port *</label>
                         <input
                             type="number"
                             id="db_port"
                             name="port"
-                            x-model="port"
                             value="{{ $dbPort }}"
                             placeholder="3306"
                             class="input input-sm w-full text-xs font-mono"
@@ -332,36 +407,33 @@
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                        <label class="block text-xs font-medium text-text-secondary mb-1">Database Name *</label>
+                        <label for="db_database" class="block text-xs font-medium text-text-secondary mb-1">Database Name *</label>
                         <input
                             type="text"
                             id="db_database"
                             name="database"
-                            x-model="database"
                             value="{{ $dbName }}"
                             placeholder="seo_academy"
                             class="input input-sm w-full text-xs font-mono"
                         >
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-text-secondary mb-1">Username *</label>
+                        <label for="db_username" class="block text-xs font-medium text-text-secondary mb-1">Username *</label>
                         <input
                             type="text"
                             id="db_username"
                             name="username"
-                            x-model="username"
                             value="{{ $dbUser }}"
-                            placeholder="seo_academy_user"
+                            placeholder="root"
                             class="input input-sm w-full text-xs font-mono"
                         >
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-text-secondary mb-1">Password</label>
+                        <label for="db_password" class="block text-xs font-medium text-text-secondary mb-1">Password</label>
                         <input
                             type="password"
                             id="db_password"
                             name="password"
-                            x-model="password"
                             value=""
                             placeholder="••••••••••••"
                             class="input input-sm w-full text-xs"
@@ -372,14 +444,10 @@
             </div>
 
             {{-- Connection Test Result Alert --}}
-            <div id="client-test-result" style="display: none;" x-show="testResult !== null">
-                <div
-                    id="client-test-box"
-                    class="p-3 rounded-lg text-xs flex items-center justify-between"
-                    :class="testResult && testResult.ok ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border border-rose-500/30 text-rose-400'"
-                >
-                    <span id="client-test-message" x-text="testResult ? testResult.message : ''"></span>
-                    <span id="client-test-status" class="font-bold uppercase text-[10px]" x-text="testResult && testResult.ok ? 'Verified' : 'Failed'"></span>
+            <div id="client-test-result" style="display: none;">
+                <div id="client-test-box" class="p-3 rounded-lg text-xs flex items-center justify-between">
+                    <span id="client-test-message"></span>
+                    <span id="client-test-status" class="font-bold uppercase text-[10px]"></span>
                 </div>
             </div>
 
@@ -402,19 +470,17 @@
                     <button
                         type="button"
                         id="btn-test-connection"
-                        onclick="window.runConnectionTest()"
-                        @click="testConnection()"
-                        :disabled="testing"
+                        onclick="window.testDatabaseConnection()"
                         class="btn btn-outline btn-sm text-xs font-semibold"
                     >
-                        <span id="test-btn-idle" x-show="!testing">Test Connection</span>
-                        <span id="test-btn-loading" style="display: none;" x-show="testing">Verifying...</span>
+                        <span id="test-btn-idle">Test Connection</span>
+                        <span id="test-btn-loading" style="display: none;">Verifying...</span>
                     </button>
                 </div>
 
                 <button
                     type="submit"
-                    class="btn btn-primary px-6 py-2.5 text-xs font-bold rounded-lg shadow-sm"
+                    class="btn btn-primary px-6 py-2.5 text-xs font-bold rounded-lg shadow-sm cursor-pointer"
                 >
                     Save &amp; Proceed to Migrations &rarr;
                 </button>
@@ -422,195 +488,22 @@
         </form>
     </div>
 
-    {{-- Bulletproof Native JavaScript Fallback & Synchronization --}}
+    {{-- Initialize correct engine on load --}}
     <script>
         (function () {
-            const activeClasses = ['border-primary-500', 'bg-primary-500/10', 'ring-2', 'ring-primary-500/30'];
-            const defaultClasses = ['border-border-default', 'bg-surface-elevated/40'];
+            const initialDriver = @js($selectedDriver);
+            window.switchDatabaseEngine(initialDriver);
 
-            window.syncDatabaseDriver = function (driver) {
-                const sqliteRadio = document.getElementById('staged-engine-sqlite');
-                const mysqlRadio = document.getElementById('staged-engine-mysql');
-                const sqliteCard = document.getElementById('card-engine-sqlite');
-                const mysqlCard = document.getElementById('card-engine-mysql');
-                const sqlitePanel = document.getElementById('sqlite-config-panel');
-                const mysqlPanel = document.getElementById('mysql-config-panel');
-                const sqliteSelected = document.getElementById('sqlite-status-selected');
-                const sqliteUnselected = document.getElementById('sqlite-status-unselected');
-                const mysqlSelected = document.getElementById('mysql-status-selected');
-                const mysqlUnselected = document.getElementById('mysql-status-unselected');
+            // Also attach direct event listeners as backup
+            const sqliteCard = document.getElementById('card-engine-sqlite');
+            const mysqlCard = document.getElementById('card-engine-mysql');
+            const sqliteRadio = document.getElementById('staged-engine-sqlite');
+            const mysqlRadio = document.getElementById('staged-engine-mysql');
 
-                if (driver === 'mysql') {
-                    if (mysqlRadio) mysqlRadio.checked = true;
-                    if (sqliteRadio) sqliteRadio.checked = false;
-
-                    if (mysqlCard) {
-                        mysqlCard.classList.remove(...defaultClasses);
-                        mysqlCard.classList.add(...activeClasses);
-                    }
-                    if (sqliteCard) {
-                        sqliteCard.classList.remove(...activeClasses);
-                        sqliteCard.classList.add(...defaultClasses);
-                    }
-
-                    if (mysqlPanel) mysqlPanel.style.display = 'block';
-                    if (sqlitePanel) sqlitePanel.style.display = 'none';
-
-                    if (mysqlSelected) mysqlSelected.style.display = 'inline';
-                    if (mysqlUnselected) mysqlUnselected.style.display = 'none';
-                    if (sqliteSelected) sqliteSelected.style.display = 'none';
-                    if (sqliteUnselected) sqliteUnselected.style.display = 'inline';
-
-                    // Ensure default values are populated if fields are blank
-                    const hostInput = document.getElementById('db_host');
-                    const portInput = document.getElementById('db_port');
-                    const dbInput = document.getElementById('db_database');
-                    const userInput = document.getElementById('db_username');
-                    if (hostInput && !hostInput.value) hostInput.value = '127.0.0.1';
-                    if (portInput && !portInput.value) portInput.value = '3306';
-                    if (dbInput && !dbInput.value) dbInput.value = 'seo_academy';
-                    if (userInput && !userInput.value) userInput.value = 'seo_academy_user';
-                } else {
-                    if (sqliteRadio) sqliteRadio.checked = true;
-                    if (mysqlRadio) mysqlRadio.checked = false;
-
-                    if (sqliteCard) {
-                        sqliteCard.classList.remove(...defaultClasses);
-                        sqliteCard.classList.add(...activeClasses);
-                    }
-                    if (mysqlCard) {
-                        mysqlCard.classList.remove(...activeClasses);
-                        mysqlCard.classList.add(...defaultClasses);
-                    }
-
-                    if (sqlitePanel) sqlitePanel.style.display = 'block';
-                    if (mysqlPanel) mysqlPanel.style.display = 'none';
-
-                    if (sqliteSelected) sqliteSelected.style.display = 'inline';
-                    if (sqliteUnselected) sqliteUnselected.style.display = 'none';
-                    if (mysqlSelected) mysqlSelected.style.display = 'none';
-                    if (mysqlUnselected) mysqlUnselected.style.display = 'inline';
-                }
-
-                // Sync Alpine data if Alpine is active
-                const container = document.getElementById('db-wizard-container');
-                if (window.Alpine && container && window.Alpine.$data) {
-                    try {
-                        const data = window.Alpine.$data(container);
-                        if (data && data.driver !== driver) {
-                            data.driver = driver;
-                        }
-                    } catch (e) {
-                        // ignore if Alpine not ready
-                    }
-                }
-            };
-
-            window.syncHostingType = function (type) {
-                const types = ['local', 'rds', 'remote', 'custom'];
-                const hostInput = document.getElementById('db_host');
-                const portInput = document.getElementById('db_port');
-                const guide = document.getElementById('cloudpanel-guide');
-
-                types.forEach(t => {
-                    const btn = document.getElementById('btn-hosting-' + t);
-                    if (btn) {
-                        if (t === type) {
-                            btn.classList.add('border-primary-500', 'bg-primary-500/10', 'ring-2', 'ring-primary-500/20', 'font-bold');
-                            btn.classList.remove('border-border-default', 'bg-surface-card');
-                        } else {
-                            btn.classList.remove('border-primary-500', 'bg-primary-500/10', 'ring-2', 'ring-primary-500/20', 'font-bold');
-                            btn.classList.add('border-border-default', 'bg-surface-card');
-                        }
-                    }
-                });
-
-                if (type === 'local') {
-                    if (hostInput) hostInput.value = '127.0.0.1';
-                    if (portInput) portInput.value = '3306';
-                    if (guide) guide.style.display = 'block';
-                } else if (type === 'rds' || type === 'remote') {
-                    if (hostInput && hostInput.value === '127.0.0.1') {
-                        hostInput.value = '';
-                    }
-                    if (portInput) portInput.value = '3306';
-                    if (guide) guide.style.display = 'none';
-                } else {
-                    if (guide) guide.style.display = 'none';
-                }
-
-                // Sync Alpine if available
-                const container = document.getElementById('db-wizard-container');
-                if (window.Alpine && container && window.Alpine.$data) {
-                    try {
-                        const data = window.Alpine.$data(container);
-                        if (data) {
-                            data.hostingType = type;
-                            if (hostInput) data.host = hostInput.value;
-                            if (portInput) data.port = portInput.value;
-                        }
-                    } catch (e) {}
-                }
-            };
-
-            window.runConnectionTest = async function () {
-                const idleEl = document.getElementById('test-btn-idle');
-                const loadingEl = document.getElementById('test-btn-loading');
-                const testResultEl = document.getElementById('client-test-result');
-                const boxEl = document.getElementById('client-test-box');
-                const msgEl = document.getElementById('client-test-message');
-                const statusEl = document.getElementById('client-test-status');
-
-                if (idleEl) idleEl.style.display = 'none';
-                if (loadingEl) loadingEl.style.display = 'inline';
-
-                const driver = document.querySelector('input[name="driver"]:checked')?.value || 'sqlite';
-                const payload = driver === 'sqlite'
-                    ? { driver: 'sqlite' }
-                    : {
-                        driver: 'mysql',
-                        host: document.getElementById('db_host')?.value || '127.0.0.1',
-                        port: document.getElementById('db_port')?.value || '3306',
-                        database: document.getElementById('db_database')?.value || 'seo_academy',
-                        username: document.getElementById('db_username')?.value || 'seo_academy_user',
-                        password: document.getElementById('db_password')?.value || '',
-                    };
-
-                try {
-                    const response = await fetch('{{ route('install.test') }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '',
-                        },
-                        body: JSON.stringify(payload),
-                    });
-
-                    const data = await response.json();
-                    const isOk = Boolean(data.ok);
-                    const message = data.message || (response.ok ? 'Connection successful.' : 'Connection check failed.');
-
-                    if (testResultEl) testResultEl.style.display = 'block';
-                    if (msgEl) msgEl.textContent = message;
-                    if (statusEl) statusEl.textContent = isOk ? 'Verified' : 'Failed';
-                    if (boxEl) {
-                        boxEl.className = isOk
-                            ? 'p-3 rounded-lg text-xs flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-                            : 'p-3 rounded-lg text-xs flex items-center justify-between bg-rose-500/10 border border-rose-500/30 text-rose-400';
-                    }
-                } catch (e) {
-                    if (testResultEl) testResultEl.style.display = 'block';
-                    if (msgEl) msgEl.textContent = 'Unable to reach the installer test endpoint. Please check network connectivity and try again.';
-                    if (statusEl) statusEl.textContent = 'Failed';
-                    if (boxEl) {
-                        boxEl.className = 'p-3 rounded-lg text-xs flex items-center justify-between bg-rose-500/10 border border-rose-500/30 text-rose-400';
-                    }
-                } finally {
-                    if (idleEl) idleEl.style.display = 'inline';
-                    if (loadingEl) loadingEl.style.display = 'none';
-                }
-            };
+            if (sqliteCard) sqliteCard.addEventListener('click', () => window.switchDatabaseEngine('sqlite'));
+            if (mysqlCard) mysqlCard.addEventListener('click', () => window.switchDatabaseEngine('mysql'));
+            if (sqliteRadio) sqliteRadio.addEventListener('change', () => window.switchDatabaseEngine('sqlite'));
+            if (mysqlRadio) mysqlRadio.addEventListener('change', () => window.switchDatabaseEngine('mysql'));
         })();
     </script>
 @endcomponent

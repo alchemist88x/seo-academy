@@ -21,11 +21,11 @@
     id="main-sidebar"
     class="sidebar border-r border-slate-800"
     :class="{
-        'collapsed': $store.sidebar.collapsed,
-        'mobile-open': $store.sidebar.mobileOpen
+        'collapsed': $store?.sidebar?.collapsed,
+        'mobile-open': $store?.sidebar?.mobileOpen
     }"
     aria-label="Sidebar Navigation"
-    @keydown.escape.window="if ($store.sidebar.mobileOpen) $store.sidebar.closeMobile()"
+    @keydown.escape.window="if ($store?.sidebar?.mobileOpen) $store.sidebar.closeMobile()"
 >
     {{-- Brand Header --}}
     <div class="h-16 flex items-center justify-between px-4 border-b border-slate-800 shrink-0">
@@ -34,7 +34,7 @@
                 {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($brandName, 0, 1)) }}
             </div>
             <span
-                x-show="!$store.sidebar.collapsed || $store.sidebar.mobileOpen"
+                x-show="!$store?.sidebar?.collapsed || $store?.sidebar?.mobileOpen"
                 x-transition:enter="transition ease-out duration-150"
                 x-transition:enter-start="opacity-0"
                 x-transition:enter-end="opacity-100"
@@ -47,16 +47,16 @@
         {{-- Desktop Collapse Toggle --}}
         <button
             type="button"
-            @click="$store.sidebar.toggleCollapse()"
+            @click="$store?.sidebar?.toggleCollapse ? $store.sidebar.toggleCollapse() : null"
             class="hidden md:flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-            :title="$store.sidebar.collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-            :aria-expanded="!$store.sidebar.collapsed"
+            :title="$store?.sidebar?.collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+            :aria-expanded="!$store?.sidebar?.collapsed"
             aria-controls="main-sidebar"
             aria-label="Toggle sidebar collapse"
         >
             <svg
                 class="w-4 h-4 transition-transform duration-200"
-                :class="{ 'rotate-180': $store.sidebar.collapsed }"
+                :class="{ 'rotate-180': $store?.sidebar?.collapsed }"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -68,7 +68,7 @@
         {{-- Mobile Close Button --}}
         <button
             type="button"
-            @click="$store.sidebar.closeMobile()"
+            @click="$store?.sidebar?.closeMobile ? $store.sidebar.closeMobile() : null"
             class="md:hidden p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
             aria-label="Close sidebar navigation"
         >
@@ -84,7 +84,7 @@
             <div class="space-y-1">
                 @if (!empty($group['title']))
                     <p
-                        x-show="!$store.sidebar.collapsed || $store.sidebar.mobileOpen"
+                        x-show="!$store?.sidebar?.collapsed || $store?.sidebar?.mobileOpen"
                         x-transition:enter="transition ease-out duration-150"
                         x-transition:enter-start="opacity-0"
                         x-transition:enter-end="opacity-100"

@@ -3,9 +3,12 @@
 namespace App\Domain\Academies\Services;
 
 use App\Domain\Academies\Models\Academy;
+use App\Domain\Assessments\Models\AssessmentAttempt;
+use App\Domain\Certificates\Models\Certificate;
 use App\Domain\Courses\Models\Course;
 use App\Domain\Platform\Models\AuditLog;
 use App\Domain\Platform\Models\Setting;
+use App\Domain\Quizzes\Models\Quiz;
 use App\Domain\Students\Models\Enrollment;
 use App\Domain\Students\Models\StudentProfile;
 use App\Domain\Support\Models\SupportTicket;
@@ -190,17 +193,56 @@ class AcademySettingsService
     public function dashboardMetrics(Academy $academy): array
     {
         $activeStudents = StudentProfile::forAcademy($academy)->active()->count();
-        $publishedCourses = Course::forAcademy($academy)->active()->count();
+        $totalStudents = StudentProfile::forAcademy($academy)->count();
+        $publishedCourses = Course::forAcademy($academy)->whereIn('status', ['Published', 'Active'])->count();
         $totalCourses = Course::forAcademy($academy)->count();
+        $draftCourses = Course::forAcademy($academy)->where('status', 'Draft')->count();
+
         $activeEnrollments = Enrollment::active()
             ->whereHas('course', fn ($query) => $query->where('academy_id', $academy->id))
             ->count();
+        $totalEnrollments = Enrollment::query()
+            ->whereHas('course', fn ($query) => $query->where('academy_id', $academy->id))
+            ->count();
+        $completedEnrollments = Enrollment::query()
+            ->where('status', 'completed')
+            ->whereHas('course', fn ($query) => $query->where('academy_id', $academy->id))
+            ->count();
+
         $trainersCount = User::role('trainer')
             ->where('is_active', true)
             ->count();
         $openTickets = SupportTicket::forAcademy($academy)
             ->whereIn('status', ['Pending', 'In Progress'])
             ->count();
+
+        $totalAssessments = Quiz::query()
+            ->whereHas('course', fn ($query) => $query->where('academy_id', $academy->id))
+            ->count();
+        $totalAttempts = AssessmentAttempt::query()
+            ->whereHas('assessment.course', fn ($query) => $query->where('academy_id', $academy->id))
+            ->count();
+
+        $totalCertificates = Certificate::query()
+            ->whereHas('course', fn ($query) => $query->where('academy_id', $academy->id))
+            ->count();
+        $activeCertificates = Certificate::query()
+            ->where('status', 'issued')
+            ->whereHas('course', fn ($query) => $query->where('academy_id', $academy->id))
+            ->count();
+
+        $recentCourses = Course::forAcademy($academy)
+            ->with('category')
+            ->latest('created_at')
+            ->limit(5)
+            ->get();
+
+        $recentEnrollments = Enrollment::query()
+            ->with(['studentProfile.user', 'course'])
+            ->whereHas('course', fn ($query) => $query->where('academy_id', $academy->id))
+            ->latest('created_at')
+            ->limit(5)
+            ->get();
 
         $recentAuditLogs = AuditLog::query()
             ->with('user:id,name,email')
@@ -216,11 +258,21 @@ class AcademySettingsService
 
         return [
             'active_students' => $activeStudents,
+            'total_students' => $totalStudents,
             'published_courses' => $publishedCourses,
             'total_courses' => $totalCourses,
+            'draft_courses' => $draftCourses,
             'active_enrollments' => $activeEnrollments,
+            'total_enrollments' => $totalEnrollments,
+            'completed_enrollments' => $completedEnrollments,
+            'total_assessments' => $totalAssessments,
+            'total_attempts' => $totalAttempts,
+            'total_certificates' => $totalCertificates,
+            'active_certificates' => $activeCertificates,
             'trainers_count' => $trainersCount,
             'open_tickets' => $openTickets,
+            'recent_courses' => $recentCourses,
+            'recent_enrollments' => $recentEnrollments,
             'recent_audit_logs' => $recentAuditLogs,
         ];
     }

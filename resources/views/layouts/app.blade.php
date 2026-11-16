@@ -52,7 +52,7 @@
     {{-- Main Content Shell --}}
     <div
         class="main-content"
-        :class="{ 'sidebar-collapsed': $store.sidebar.collapsed }"
+        :class="{ 'sidebar-collapsed': $store?.sidebar?.collapsed }"
     >
         {{-- Top Header --}}
         <x-header :title="$title">

@@ -84,12 +84,18 @@ if (window.Alpine) {
     initAlpineStores();
 } else {
     document.addEventListener('alpine:init', initAlpineStores);
+    document.addEventListener('livewire:init', () => {
+        if (window.Alpine) initAlpineStores();
+    });
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.Alpine) initAlpineStores();
+    });
 }
 
 // Listen for global toast events (from Livewire or JS)
 window.addEventListener('toast', (event) => {
     const detail = Array.isArray(event.detail) ? event.detail[0] : event.detail;
-    if (window.Alpine && window.Alpine.store('toasts')) {
+    if (window.Alpine && typeof window.Alpine.store === 'function' && window.Alpine.store('toasts')) {
         window.Alpine.store('toasts').add(detail || {});
     }
 });

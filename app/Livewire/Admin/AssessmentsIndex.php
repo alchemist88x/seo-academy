@@ -46,6 +46,40 @@ class AssessmentsIndex extends Component
 
     public bool $newRandomizeOrder = false;
 
+    // Edit assessment modal fields
+    public bool $showEditModal = false;
+
+    public ?string $editingQuizId = null;
+
+    public string $editTitle = '';
+
+    public string $editDescription = '';
+
+    public string $editCourseId = '';
+
+    public string $editType = 'quiz';
+
+    public bool $editIsRequired = true;
+
+    public int $editPassingPercentage = 70;
+
+    public ?int $editAttemptLimit = null;
+
+    public ?int $editTimeLimit = null;
+
+    public bool $editRandomizeQuestions = false;
+
+    public bool $editRandomizeOrder = false;
+
+    // Delete assessment modal fields
+    public bool $showDeleteModal = false;
+
+    public ?string $deletingQuizId = null;
+
+    public string $deletingQuizTitle = '';
+
+    public int $deletingQuizAttemptsCount = 0;
+
     // Pool Configuration Modal State
     public bool $showPoolModal = false;
 
@@ -118,6 +152,104 @@ class AssessmentsIndex extends Component
         ]);
 
         $this->showCreateModal = false;
+        $this->dispatch('toast', type: 'success', message: 'Assessment created successfully.');
+    }
+
+    public function openEditModal(string $quizId): void
+    {
+        $quiz = Quiz::findOrFail($quizId);
+        $user = Auth::user();
+        $this->authorizeCourseAction($quiz->course_id, $user);
+
+        $this->editingQuizId = $quiz->id;
+        $this->editTitle = (string) $quiz->title;
+        $this->editDescription = (string) ($quiz->description ?? '');
+        $this->editCourseId = (string) $quiz->course_id;
+        $this->editType = (string) ($quiz->type ?? 'quiz');
+        $this->editIsRequired = (bool) $quiz->is_required;
+        $this->editPassingPercentage = (int) ($quiz->passing_percentage ?? $quiz->pass_mark ?? 70);
+        $this->editAttemptLimit = $quiz->attempt_limit;
+        $this->editTimeLimit = $quiz->time_limit_minutes;
+        $this->editRandomizeQuestions = (bool) $quiz->randomize_questions;
+        $this->editRandomizeOrder = (bool) $quiz->randomize_order;
+
+        $this->showEditModal = true;
+    }
+
+    public function updateAssessment(): void
+    {
+        if (! $this->editingQuizId) {
+            return;
+        }
+
+        $this->validate([
+            'editTitle' => 'required|string|max:255',
+            'editCourseId' => 'required|exists:courses,id',
+            'editPassingPercentage' => 'required|integer|min:1|max:100',
+        ]);
+
+        $quiz = Quiz::findOrFail($this->editingQuizId);
+        $user = Auth::user();
+        $this->authorizeCourseAction($quiz->course_id, $user);
+        $this->authorizeCourseAction($this->editCourseId, $user);
+
+        $quiz->update([
+            'course_id' => $this->editCourseId,
+            'title' => $this->editTitle,
+            'description' => $this->editDescription,
+            'type' => $this->editType,
+            'is_required' => $this->editIsRequired,
+            'passing_percentage' => $this->editPassingPercentage,
+            'pass_mark' => $this->editPassingPercentage,
+            'attempt_limit' => $this->editAttemptLimit,
+            'time_limit_minutes' => $this->editTimeLimit,
+            'randomize_questions' => $this->editRandomizeQuestions,
+            'randomize_order' => $this->editRandomizeOrder,
+        ]);
+
+        $this->showEditModal = false;
+        $this->editingQuizId = null;
+        $this->dispatch('toast', type: 'success', message: 'Assessment updated successfully.');
+    }
+
+    public function openDeleteModal(string $quizId): void
+    {
+        $quiz = Quiz::withCount('attempts')->findOrFail($quizId);
+        $user = Auth::user();
+        $this->authorizeCourseAction($quiz->course_id, $user);
+
+        $this->deletingQuizId = $quiz->id;
+        $this->deletingQuizTitle = $quiz->title;
+        $this->deletingQuizAttemptsCount = (int) $quiz->attempts_count;
+        $this->showDeleteModal = true;
+    }
+
+    public function deleteAssessment(): void
+    {
+        if (! $this->deletingQuizId) {
+            return;
+        }
+
+        $quiz = Quiz::withCount('attempts')->findOrFail($this->deletingQuizId);
+        $user = Auth::user();
+        $this->authorizeCourseAction($quiz->course_id, $user);
+
+        if ($quiz->attempts_count > 0) {
+            $this->dispatch('toast', type: 'error', message: 'Cannot delete assessment with existing student attempts.');
+            $this->showDeleteModal = false;
+
+            return;
+        }
+
+        $quiz->pools()->delete();
+        $quiz->questions()->delete();
+        $quiz->delete();
+
+        $this->showDeleteModal = false;
+        $this->deletingQuizId = null;
+        $this->deletingQuizTitle = '';
+        $this->deletingQuizAttemptsCount = 0;
+        $this->dispatch('toast', type: 'success', message: 'Assessment deleted successfully.');
     }
 
     public function openPoolsModal(string $quizId): void

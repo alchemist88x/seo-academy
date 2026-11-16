@@ -209,6 +209,14 @@
                                             Structure
                                         </a>
 
+                                        <a
+                                            href="{{ route('admin.courses.gradebook', $course) }}"
+                                            class="btn btn-secondary btn-sm"
+                                            title="View Course Gradebook"
+                                        >
+                                            Gradebook
+                                        </a>
+
                                         <x-button variant="secondary" size="sm" wire:click="openEditModal('{{ $course->id }}')">
                                             Edit
                                         </x-button>
@@ -239,7 +247,7 @@
                                     @can('archive', $course)
                                         @if ($course->status !== 'Archived')
                                             <x-button
-                                                variant="danger"
+                                                variant="secondary"
                                                 size="sm"
                                                 wire:click="transitionStatus('{{ $course->id }}', 'Archived')"
                                                 wire:loading.attr="disabled"
@@ -247,6 +255,16 @@
                                                 Archive
                                             </x-button>
                                         @endif
+                                    @endcan
+
+                                    @can('delete', $course)
+                                        <x-button
+                                            variant="danger"
+                                            size="sm"
+                                            wire:click="openDeleteModal('{{ $course->id }}')"
+                                        >
+                                            Delete
+                                        </x-button>
                                     @endcan
                                 </div>
                             </td>
@@ -551,6 +569,41 @@
                     @endforeach
                 </div>
             @endif
+        </div>
+    </x-modal>
+
+    {{-- Safe Delete Course Modal --}}
+    <x-modal name="course-delete-modal" title="Delete Course" maxWidth="md">
+        <div class="space-y-4">
+            <div class="p-4 rounded-xl bg-danger-50 dark:bg-danger-950/30 border border-danger-200 dark:border-danger-800 text-danger-700 dark:text-danger-300 text-xs space-y-2">
+                <p class="font-bold">Are you sure you want to permanently delete this course?</p>
+                <p class="font-mono text-sm text-text-primary">{{ $deletingCourseTitle }}</p>
+                @if ($deletingCourseEnrollmentsCount > 0)
+                    <p class="font-semibold text-rose-600 dark:text-rose-400">
+                        Warning: This course currently has {{ $deletingCourseEnrollmentsCount }} active or completed student enrollment(s). Deletion is blocked to protect student history. Please archive the course instead.
+                    </p>
+                @else
+                    <p class="text-text-secondary">
+                        This action will delete the course, its curriculum structure, lessons, and assignments. This action cannot be undone.
+                    </p>
+                @endif
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-3 border-t border-border-default">
+                <x-button variant="secondary" size="sm" type="button" @click="open = false">
+                    Cancel
+                </x-button>
+                <x-button
+                    variant="danger"
+                    size="sm"
+                    type="button"
+                    wire:click="deleteCourse"
+                    :disabled="$deletingCourseEnrollmentsCount > 0"
+                    wire:loading.attr="disabled"
+                >
+                    Confirm Delete
+                </x-button>
+            </div>
         </div>
     </x-modal>
 </div>

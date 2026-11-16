@@ -320,6 +320,49 @@ class CourseManagementService
         });
     }
 
+    public function delete(Course $course, User $actor, bool $force = false): void
+    {
+        $activeEnrollments = $course->enrollments()
+            ->whereIn('status', ['active', 'completed'])
+            ->count();
+
+        if ($activeEnrollments > 0 && ! $force) {
+            throw ValidationException::withMessages([
+                'course' => "Cannot delete course '{$course->title}' because it has {$activeEnrollments} active or completed student enrollment(s). Archive the course instead or remove active enrollments first.",
+            ]);
+        }
+
+        DB::transaction(function () use ($course, $actor): void {
+            // Remove prerequisites associations
+            DB::table('course_prerequisites')
+                ->where('course_id', $course->getKey())
+                ->orWhere('prerequisite_course_id', $course->getKey())
+                ->delete();
+
+            // Remove trainer assignments
+            DB::table('course_trainers')
+                ->where('course_id', $course->getKey())
+                ->delete();
+
+            $courseTitle = $course->title;
+            $academy = $course->academy;
+            $courseId = (string) $course->getKey();
+
+            $course->delete();
+
+            if ($academy) {
+                $this->recordAudit(
+                    $academy,
+                    $actor,
+                    'course.deleted',
+                    Course::class,
+                    $courseId,
+                    ['title' => $courseTitle],
+                );
+            }
+        });
+    }
+
     public function syncTrainers(Course $course, array $trainerIds, User $actor): void
     {
         $trainerIds = array_values(array_unique(array_filter(

@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Livewire\WithPagination;
@@ -89,10 +90,24 @@ class CoursesIndex extends Component
 
     public bool $categoryActive = true;
 
+    #[Url]
+    public bool $manage_categories = false;
+
+    // Course deletion state
+    public ?string $deletingCourseId = null;
+
+    public string $deletingCourseTitle = '';
+
+    public int $deletingCourseEnrollmentsCount = 0;
+
     public function mount(TenantContext $tenantContext): void
     {
         $this->resolveAcademy($tenantContext);
         $this->authorize('viewAny', Course::class);
+
+        if ($this->manage_categories) {
+            $this->openCategoriesModal($tenantContext);
+        }
     }
 
     public function updatingSearch(): void
@@ -346,6 +361,52 @@ class CoursesIndex extends Component
         }
 
         $this->dispatch('toast', type: 'success', message: 'Category deleted.');
+    }
+
+    public function openDeleteModal(string $courseId, TenantContext $tenantContext): void
+    {
+        $academy = $this->resolveAcademy($tenantContext);
+        $course = Course::query()
+            ->forAcademy($academy)
+            ->withCount(['enrollments' => function ($q) {
+                $q->whereIn('status', ['active', 'completed']);
+            }])
+            ->findOrFail($courseId);
+
+        $this->authorize('delete', $course);
+
+        $this->deletingCourseId = (string) $course->getKey();
+        $this->deletingCourseTitle = (string) $course->title;
+        $this->deletingCourseEnrollmentsCount = (int) $course->enrollments_count;
+
+        $this->dispatch('open-modal', 'course-delete-modal');
+    }
+
+    public function deleteCourse(TenantContext $tenantContext, CourseManagementService $service): void
+    {
+        if ($this->deletingCourseId === null) {
+            return;
+        }
+
+        $academy = $this->resolveAcademy($tenantContext);
+        $course = Course::query()
+            ->forAcademy($academy)
+            ->findOrFail($this->deletingCourseId);
+
+        $this->authorize('delete', $course);
+
+        try {
+            $service->delete($course, Auth::user());
+            $this->dispatch('toast', type: 'success', message: "Course '{$this->deletingCourseTitle}' safely deleted.");
+            $this->dispatch('close-modal', 'course-delete-modal');
+            $this->deletingCourseId = null;
+            $this->deletingCourseTitle = '';
+            $this->deletingCourseEnrollmentsCount = 0;
+            $this->resetPage();
+        } catch (ValidationException $e) {
+            $errorMsg = $e->validator->errors()->first('course') ?: $e->getMessage();
+            $this->dispatch('toast', type: 'error', message: $errorMsg);
+        }
     }
 
     public function resetCategoryForm(): void

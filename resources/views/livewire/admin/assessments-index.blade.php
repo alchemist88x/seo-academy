@@ -111,7 +111,7 @@
                                     <span class="text-text-muted">0</span>
                                 @endif
                             </td>
-                            <td class="py-3 px-4 text-right space-x-1.5">
+                            <td class="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
                                 <button
                                     type="button"
                                     wire:click="openPoolsModal('{{ $quiz->id }}')"
@@ -126,6 +126,22 @@
                                 >
                                     Grading
                                 </a>
+                                <button
+                                    type="button"
+                                    wire:click="openEditModal('{{ $quiz->id }}')"
+                                    class="btn btn-secondary btn-xs"
+                                    title="Edit assessment settings"
+                                >
+                                    Edit
+                                </button>
+                                <button
+                                    type="button"
+                                    wire:click="openDeleteModal('{{ $quiz->id }}')"
+                                    class="btn btn-danger btn-xs"
+                                    title="Delete assessment"
+                                >
+                                    Delete
+                                </button>
                             </td>
                         </tr>
                     @empty
@@ -370,6 +386,138 @@
                 <div class="pt-4 border-t border-border-default flex items-center justify-end">
                     <button type="button" wire:click="$set('showPoolModal', false)" class="btn btn-secondary btn-sm">
                         Done
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Edit Assessment Modal --}}
+    @if ($showEditModal)
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div class="bg-surface-card rounded-2xl border border-border-default max-w-lg w-full p-6 space-y-4 shadow-xl">
+                <div class="flex items-center justify-between pb-3 border-b border-border-default">
+                    <h3 class="text-lg font-bold text-text-primary">Edit Assessment</h3>
+                    <button type="button" wire:click="$set('showEditModal', false)" class="text-text-muted hover:text-text-primary">
+                        &times;
+                    </button>
+                </div>
+
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-text-primary mb-1">Title *</label>
+                        <input type="text" wire:model="editTitle" class="input w-full">
+                        @error('editTitle') <span class="text-rose-500 text-xs">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-text-primary mb-1">Course *</label>
+                        <select wire:model="editCourseId" class="input w-full">
+                            @foreach ($availableCourses as $course)
+                                <option value="{{ $course->id }}">{{ $course->title }}</option>
+                            @endforeach
+                        </select>
+                        @error('editCourseId') <span class="text-rose-500 text-xs">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-text-primary mb-1">Assessment Type</label>
+                        <select wire:model="editType" class="input w-full">
+                            <option value="quiz">Quiz</option>
+                            <option value="exam">Formal Exam</option>
+                            <option value="assignment">Assignment</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-text-primary mb-1">Description</label>
+                        <textarea wire:model="editDescription" rows="2" class="input w-full"></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-text-primary mb-1">Passing Score (%) *</label>
+                            <input type="number" min="1" max="100" wire:model="editPassingPercentage" class="input w-full">
+                            @error('editPassingPercentage') <span class="text-rose-500 text-xs">{{ $message }}</span> @enderror
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-text-primary mb-1">Attempt Limit</label>
+                            <input type="number" min="1" wire:model="editAttemptLimit" class="input w-full" placeholder="Unlimited">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-text-primary mb-1">Time Limit (mins)</label>
+                            <input type="number" min="1" wire:model="editTimeLimit" class="input w-full" placeholder="Unlimited">
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 pt-2 border-t border-border-default">
+                        <label class="flex items-center gap-2 text-xs text-text-primary">
+                            <input type="checkbox" wire:model="editIsRequired" class="rounded border-border-default text-primary-600">
+                            <span>Mandatory for course completion</span>
+                        </label>
+
+                        <label class="flex items-center gap-2 text-xs text-text-primary">
+                            <input type="checkbox" wire:model="editRandomizeQuestions" class="rounded border-border-default text-primary-600">
+                            <span>Randomize questions selection from pools</span>
+                        </label>
+
+                        <label class="flex items-center gap-2 text-xs text-text-primary">
+                            <input type="checkbox" wire:model="editRandomizeOrder" class="rounded border-border-default text-primary-600">
+                            <span>Shuffle question order for each attempt</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-border-default flex items-center justify-end gap-3">
+                    <button type="button" wire:click="$set('showEditModal', false)" class="btn btn-secondary btn-sm">
+                        Cancel
+                    </button>
+                    <button type="button" wire:click="updateAssessment" class="btn btn-primary btn-sm">
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Delete Assessment Modal --}}
+    @if ($showDeleteModal)
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div class="bg-surface-card rounded-2xl border border-border-default max-w-md w-full p-6 space-y-4 shadow-xl">
+                <div class="flex items-center justify-between pb-3 border-b border-border-default">
+                    <h3 class="text-lg font-bold text-text-primary">Delete Assessment</h3>
+                    <button type="button" wire:click="$set('showDeleteModal', false)" class="text-text-muted hover:text-text-primary">
+                        &times;
+                    </button>
+                </div>
+
+                <div class="p-4 rounded-xl bg-danger-50 dark:bg-danger-950/30 border border-danger-200 dark:border-danger-800 text-danger-700 dark:text-danger-300 text-xs space-y-2">
+                    <p class="font-bold">Are you sure you want to delete this assessment?</p>
+                    <p class="font-mono text-sm text-text-primary">{{ $deletingQuizTitle }}</p>
+                    @if ($deletingQuizAttemptsCount > 0)
+                        <p class="font-semibold text-rose-600 dark:text-rose-400">
+                            Warning: This assessment has {{ $deletingQuizAttemptsCount }} student submission attempt(s). Deletion is blocked to preserve student assessment records.
+                        </p>
+                    @else
+                        <p class="text-text-secondary">
+                            This will permanently remove the assessment and its pool configurations. This action cannot be undone.
+                        </p>
+                    @endif
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-3 border-t border-border-default">
+                    <button type="button" wire:click="$set('showDeleteModal', false)" class="btn btn-secondary btn-sm">
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        wire:click="deleteAssessment"
+                        :disabled="$deletingQuizAttemptsCount > 0"
+                        class="btn btn-danger btn-sm"
+                    >
+                        Confirm Delete
                     </button>
                 </div>
             </div>

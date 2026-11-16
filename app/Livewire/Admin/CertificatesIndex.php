@@ -5,6 +5,7 @@ namespace App\Livewire\Admin;
 use App\Domain\Certificates\Models\Certificate;
 use App\Domain\Certificates\Services\CertificateIssuanceService;
 use App\Domain\Platform\Models\Setting;
+use App\Domain\Students\Models\Enrollment;
 use App\Domain\Tenants\Services\TenantContext;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
@@ -51,6 +52,13 @@ class CertificatesIndex extends Component
     public string $signatoryTitle = '';
 
     public bool $settingsSaved = false;
+
+    // Manual Issue Modal State
+    public bool $showIssueModal = false;
+
+    public string $issueEnrollmentId = '';
+
+    public string $issueTemplate = 'classic';
 
     public function mount(TenantContext $tenantContext): void
     {
@@ -236,10 +244,54 @@ class CertificatesIndex extends Component
         $this->showAuditHistoryModal = false;
     }
 
+    public function openIssueModal(): void
+    {
+        if (! Auth::user()?->hasRole('admin')) {
+            abort(403, 'Unauthorized: Only administrators may issue certificates.');
+        }
+
+        $this->issueEnrollmentId = '';
+        $this->issueTemplate = $this->defaultTemplate;
+        $this->showIssueModal = true;
+    }
+
+    public function issueCertificateForEnrollment(CertificateIssuanceService $issuanceService): void
+    {
+        if (! Auth::user()?->hasRole('admin')) {
+            abort(403, 'Unauthorized: Only administrators may issue certificates.');
+        }
+
+        $this->validate([
+            'issueEnrollmentId' => ['required', 'string', 'exists:enrollments,id'],
+            'issueTemplate' => ['required', 'string', 'in:classic,modern,minimalist'],
+        ]);
+
+        $enrollment = Enrollment::with(['studentProfile.user', 'course'])->findOrFail($this->issueEnrollmentId);
+
+        try {
+            $certificate = $issuanceService->issueCertificate($enrollment, $this->issueTemplate);
+            $this->showIssueModal = false;
+            $this->issueEnrollmentId = '';
+            $this->dispatch('toast', type: 'success', message: "Certificate {$certificate->certificate_number} issued successfully.");
+        } catch (\Throwable $e) {
+            $this->addError('issue_general', $e->getMessage());
+        }
+    }
+
     public function render(TenantContext $tenantContext)
     {
         $user = Auth::user();
         $academy = $tenantContext->getAcademy();
+
+        $eligibleEnrollments = collect();
+        if ($user?->hasRole('admin') && $academy) {
+            $eligibleEnrollments = Enrollment::query()
+                ->where('status', 'completed')
+                ->whereDoesntHave('certificate')
+                ->whereHas('course', fn ($q) => $q->where('academy_id', $academy->id))
+                ->with(['studentProfile.user', 'course'])
+                ->get();
+        }
 
         $query = Certificate::query()
             ->with(['user', 'course', 'enrollment', 'supersedes', 'supersededBy']);
@@ -276,6 +328,7 @@ class CertificatesIndex extends Component
 
         return view('livewire.admin.certificates-index', [
             'certificates' => $certificates,
+            'eligibleEnrollments' => $eligibleEnrollments,
             'academy' => $academy,
             'isAdmin' => $user ? ($user->role === 'admin' || $user->hasRole('admin')) : false,
         ]);

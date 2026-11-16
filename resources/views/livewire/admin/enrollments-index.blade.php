@@ -340,7 +340,7 @@
             />
 
             <div class="pt-4 border-t border-border-default flex items-center justify-end gap-2">
-                <x-button type="button" variant="secondary" wire:click="$dispatch('close-modal', 'enrollment-single-modal')">
+                <x-button type="button" variant="secondary" x-on:click="$dispatch('close-modal', 'enrollment-single-modal')">
                     Cancel
                 </x-button>
                 <x-button type="submit" variant="primary" wire:loading.attr="disabled">
@@ -476,7 +476,7 @@
                 />
 
                 <div class="pt-4 border-t border-border-default flex items-center justify-end gap-2">
-                    <x-button type="button" variant="secondary" wire:click="$dispatch('close-modal', 'enrollment-bulk-modal')">
+                    <x-button type="button" variant="secondary" x-on:click="$dispatch('close-modal', 'enrollment-bulk-modal')">
                         Cancel
                     </x-button>
                     <x-button type="submit" variant="primary" wire:loading.attr="disabled">
@@ -558,7 +558,7 @@
                 @endif
 
                 <div class="pt-4 border-t border-border-default flex items-center justify-end gap-2">
-                    <x-button type="button" variant="secondary" wire:click="$dispatch('close-modal', 'enrollment-action-modal')">
+                    <x-button type="button" variant="secondary" x-on:click="$dispatch('close-modal', 'enrollment-action-modal')">
                         Cancel
                     </x-button>
                     <x-button type="submit" :variant="in_array($actionType, ['suspend', 'cancel']) ? 'danger' : 'primary'" wire:loading.attr="disabled">
@@ -665,7 +665,7 @@
                 </div>
 
                 <div class="flex justify-end pt-3 border-t border-border-default">
-                    <x-button variant="secondary" wire:click="$dispatch('close-modal', 'enrollment-view-modal')">
+                    <x-button variant="secondary" x-on:click="$dispatch('close-modal', 'enrollment-view-modal')">
                         Close
                     </x-button>
                 </div>
