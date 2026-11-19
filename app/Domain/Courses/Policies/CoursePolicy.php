@@ -86,6 +86,11 @@ class CoursePolicy
         return $user->is_active && $user->hasRole('admin');
     }
 
+    public function restore(User $user, Course $course): bool
+    {
+        return $user->is_active && $user->hasRole('admin');
+    }
+
     public function assignTrainers(User $user, Course $course): bool
     {
         return $user->is_active && $user->hasRole('admin');

@@ -76,6 +76,14 @@ class StudentsIndex extends Component
 
     public ?StudentProfile $confirmingSuspendProfile = null;
 
+    // Delete confirmation modal state
+    public ?string $deletingStudentId = null;
+
+    public ?StudentProfile $deletingStudentProfile = null;
+
+    /** @var array{enrollments_count?: int, active_enrollments_count?: int, assessment_attempts_count?: int, assignment_submissions_count?: int, certificates_count?: int, total_academic_records?: int} */
+    public array $deletingStudentImpact = [];
+
     // CSV Import state
     public $csvFile = null;
 
@@ -349,6 +357,65 @@ class StudentsIndex extends Component
         );
     }
 
+    public function openDeleteModal(string $profileId, TenantContext $tenantContext, StudentManagementService $service): void
+    {
+        $academy = $this->resolveAcademy($tenantContext);
+        $profile = StudentProfile::query()
+            ->forAcademy($academy)
+            ->with(['user', 'enrollments'])
+            ->findOrFail($profileId);
+
+        $this->authorize('delete', $profile);
+
+        $this->deletingStudentId = $profileId;
+        $this->deletingStudentProfile = $profile;
+        $this->deletingStudentImpact = $service->getImpactSummary($profile);
+
+        $this->dispatch('open-modal', 'student-delete-modal');
+    }
+
+    public function cancelDelete(): void
+    {
+        $this->deletingStudentId = null;
+        $this->deletingStudentProfile = null;
+        $this->deletingStudentImpact = [];
+        $this->dispatch('close-modal', 'student-delete-modal');
+    }
+
+    public function confirmDeleteStudent(TenantContext $tenantContext, StudentManagementService $service): void
+    {
+        if ($this->deletingStudentId === null) {
+            return;
+        }
+
+        $academy = $this->resolveAcademy($tenantContext);
+        $profile = StudentProfile::query()
+            ->forAcademy($academy)
+            ->with('user')
+            ->findOrFail($this->deletingStudentId);
+
+        $this->authorize('delete', $profile);
+
+        try {
+            $service->delete($profile, Auth::user());
+            $this->dispatch('toast', type: 'success', message: 'Student account deleted. Authentication access removed and academic records preserved.');
+            $this->cancelDelete();
+        } catch (ValidationException $e) {
+            $msg = $e->validator->errors()->first('student') ?: $e->getMessage();
+            $this->dispatch('toast', type: 'error', message: $msg);
+        }
+    }
+
+    public function restoreStudent(string $profileId, TenantContext $tenantContext, StudentManagementService $service): void
+    {
+        $this->resolveAcademy($tenantContext);
+        $profile = StudentProfile::onlyTrashed()->findOrFail($profileId);
+        $this->authorize('restore', $profile);
+
+        $service->restore($profileId, Auth::user());
+        $this->dispatch('toast', type: 'success', message: 'Student account restored and authentication access reactivated.');
+    }
+
     public function openImportModal(TenantContext $tenantContext): void
     {
         $academy = $this->resolveAcademy($tenantContext);
@@ -458,6 +525,7 @@ class StudentsIndex extends Component
 
         $students = $service->listForAcademy($academy, [
             'search' => $this->search,
+            'status' => $this->status,
             'proficiency' => $this->proficiency ?: $this->level,
             'batch' => $this->batch,
             'course_id' => $this->courseId,

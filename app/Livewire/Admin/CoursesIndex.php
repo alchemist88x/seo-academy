@@ -100,6 +100,16 @@ class CoursesIndex extends Component
 
     public int $deletingCourseEnrollmentsCount = 0;
 
+    public ?Course $deletingCourse = null;
+
+    /** @var array{enrollments_count?: int, active_enrollments_count?: int, modules_count?: int, lessons_count?: int, quizzes_count?: int, assignments_count?: int, certificates_count?: int, has_academic_history?: bool, can_delete_permanently?: bool, blocking_reasons?: array<int, string>} */
+    public array $deletingCourseImpact = [];
+
+    // Course archive state
+    public ?string $archivingCourseId = null;
+
+    public ?Course $archivingCourse = null;
+
     public function mount(TenantContext $tenantContext): void
     {
         $this->resolveAcademy($tenantContext);
@@ -363,23 +373,96 @@ class CoursesIndex extends Component
         $this->dispatch('toast', type: 'success', message: 'Category deleted.');
     }
 
-    public function openDeleteModal(string $courseId, TenantContext $tenantContext): void
+    public function openArchiveModal(string $courseId, TenantContext $tenantContext): void
     {
         $academy = $this->resolveAcademy($tenantContext);
         $course = Course::query()
             ->forAcademy($academy)
-            ->withCount(['enrollments' => function ($q) {
-                $q->whereIn('status', ['active', 'completed']);
-            }])
+            ->findOrFail($courseId);
+
+        $this->authorize('archive', $course);
+
+        $this->archivingCourseId = $courseId;
+        $this->archivingCourse = $course;
+
+        $this->dispatch('open-modal', 'course-archive-modal');
+    }
+
+    public function cancelArchive(): void
+    {
+        $this->archivingCourseId = null;
+        $this->archivingCourse = null;
+        $this->dispatch('close-modal', 'course-archive-modal');
+    }
+
+    public function confirmArchiveCourse(TenantContext $tenantContext, CourseManagementService $service): void
+    {
+        $targetId = $this->archivingCourseId ?? $this->deletingCourseId;
+        if ($targetId === null) {
+            return;
+        }
+
+        $academy = $this->resolveAcademy($tenantContext);
+        $course = Course::query()
+            ->forAcademy($academy)
+            ->findOrFail($targetId);
+
+        $this->authorize('archive', $course);
+
+        $service->archive($course, Auth::user());
+        $this->dispatch('toast', type: 'success', message: "Course '{$course->title}' archived. New enrollments prevented while active student access is preserved.");
+
+        $this->cancelArchive();
+        if ($this->deletingCourseId !== null) {
+            $this->dispatch('close-modal', 'course-delete-modal');
+            $this->deletingCourseId = null;
+            $this->deletingCourse = null;
+            $this->deletingCourseImpact = [];
+        }
+        $this->resetPage();
+    }
+
+    public function restoreCourse(string $courseId, TenantContext $tenantContext, CourseManagementService $service): void
+    {
+        $academy = $this->resolveAcademy($tenantContext);
+        $course = Course::query()
+            ->forAcademy($academy)
+            ->findOrFail($courseId);
+
+        $this->authorize('restore', $course);
+
+        $service->restoreArchived($course, Auth::user(), 'Published');
+        $this->dispatch('toast', type: 'success', message: "Course '{$course->title}' restored to Published.");
+        $this->resetPage();
+    }
+
+    public function openDeleteModal(string $courseId, TenantContext $tenantContext, CourseManagementService $service): void
+    {
+        $academy = $this->resolveAcademy($tenantContext);
+        $course = Course::query()
+            ->forAcademy($academy)
+            ->with(['modules', 'enrollments'])
             ->findOrFail($courseId);
 
         $this->authorize('delete', $course);
 
         $this->deletingCourseId = (string) $course->getKey();
         $this->deletingCourseTitle = (string) $course->title;
-        $this->deletingCourseEnrollmentsCount = (int) $course->enrollments_count;
+        $this->deletingCourse = $course;
+        $this->deletingCourseImpact = $service->getImpactSummary($course);
+        $this->deletingCourseEnrollmentsCount = $this->deletingCourseImpact['enrollments_count'];
 
         $this->dispatch('open-modal', 'course-delete-modal');
+    }
+
+    public function cancelDeleteCourse(): void
+    {
+        $this->deletingCourseId = null;
+        $this->deletingCourseTitle = '';
+        $this->deletingCourse = null;
+        $this->deletingCourseImpact = [];
+        $this->deletingCourseEnrollmentsCount = 0;
+        $this->dispatch('close-modal', 'course-delete-modal');
     }
 
     public function deleteCourse(TenantContext $tenantContext, CourseManagementService $service): void
@@ -398,10 +481,7 @@ class CoursesIndex extends Component
         try {
             $service->delete($course, Auth::user());
             $this->dispatch('toast', type: 'success', message: "Course '{$this->deletingCourseTitle}' safely deleted.");
-            $this->dispatch('close-modal', 'course-delete-modal');
-            $this->deletingCourseId = null;
-            $this->deletingCourseTitle = '';
-            $this->deletingCourseEnrollmentsCount = 0;
+            $this->cancelDeleteCourse();
             $this->resetPage();
         } catch (ValidationException $e) {
             $errorMsg = $e->validator->errors()->first('course') ?: $e->getMessage();

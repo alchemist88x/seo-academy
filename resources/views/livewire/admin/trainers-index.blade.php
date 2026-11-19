@@ -32,6 +32,7 @@
                 :options="[
                     'active' => 'Active',
                     'inactive' => 'Suspended',
+                    'deleted' => 'Deleted',
                 ]"
             />
         </div>
@@ -88,26 +89,57 @@
                                 {{ $trainer->user?->phone ?: '—' }}
                             </td>
                             <td>
-                                <x-badge :color="$trainer->active ? 'green' : 'red'">
-                                    {{ $trainer->active ? 'Active' : 'Suspended' }}
-                                </x-badge>
+                                @if ($trainer->trashed())
+                                    <x-badge color="red">
+                                        Deleted
+                                    </x-badge>
+                                @else
+                                    <x-badge :color="$trainer->active ? 'green' : 'red'">
+                                        {{ $trainer->active ? 'Active' : 'Suspended' }}
+                                    </x-badge>
+                                @endif
                             </td>
                             <td class="text-right">
                                 <div class="inline-flex items-center justify-end gap-2">
-                                    @can('update', $trainer)
-                                        <x-button variant="secondary" size="sm" wire:click="openEditModal('{{ $trainer->id }}')">
-                                            Edit
-                                        </x-button>
+                                    @if ($trainer->trashed())
+                                        @can('restore', $trainer)
+                                            <x-button
+                                                variant="primary"
+                                                size="sm"
+                                                wire:click="restoreTrainer('{{ $trainer->id }}')"
+                                                wire:loading.attr="disabled"
+                                            >
+                                                Restore
+                                            </x-button>
+                                        @endcan
+                                    @else
+                                        @can('update', $trainer)
+                                            <x-button variant="secondary" size="sm" wire:click="openEditModal('{{ $trainer->id }}')">
+                                                Edit
+                                            </x-button>
 
-                                        <x-button
-                                            :variant="$trainer->active ? 'danger' : 'primary'"
-                                            size="sm"
-                                            wire:click="toggleActive('{{ $trainer->id }}')"
-                                            wire:loading.attr="disabled"
-                                        >
-                                            {{ $trainer->active ? 'Suspend' : 'Activate' }}
-                                        </x-button>
-                                    @endcan
+                                            <x-button
+                                                :variant="$trainer->active ? 'ghost' : 'primary'"
+                                                size="sm"
+                                                wire:click="toggleActive('{{ $trainer->id }}')"
+                                                wire:loading.attr="disabled"
+                                                class="{{ $trainer->active ? 'text-amber-500 hover:text-amber-600' : '' }}"
+                                            >
+                                                {{ $trainer->active ? 'Suspend' : 'Activate' }}
+                                            </x-button>
+                                        @endcan
+
+                                        @can('delete', $trainer)
+                                            <x-button
+                                                variant="danger"
+                                                size="sm"
+                                                wire:click="openDeleteModal('{{ $trainer->id }}')"
+                                                wire:loading.attr="disabled"
+                                            >
+                                                Delete
+                                            </x-button>
+                                        @endcan
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -192,5 +224,84 @@
                 </x-button>
             </div>
         </form>
+    </x-modal>
+
+    {{-- Delete Trainer Confirmation Modal --}}
+    <x-modal
+        name="trainer-delete-modal"
+        title="Delete Trainer Account"
+        description="Safely deactivate and soft-delete trainer profile while preserving assigned courses and authorship."
+        maxWidth="md"
+    >
+        @if ($deletingTrainerProfile)
+            <div class="space-y-4">
+                <div class="p-3.5 rounded-lg bg-surface-elevated border border-border-default space-y-1.5 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-text-muted">Trainer:</span>
+                        <span class="font-semibold text-text-primary">{{ $deletingTrainerProfile->user?->name }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-text-muted">Email:</span>
+                        <span class="font-mono text-text-secondary">{{ $deletingTrainerProfile->user?->email }}</span>
+                    </div>
+                    @if ($deletingTrainerProfile->specialty)
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-muted">Specialty:</span>
+                            <span class="text-text-primary">{{ $deletingTrainerProfile->specialty }}</span>
+                        </div>
+                    @endif
+                </div>
+
+                {{-- Related Record Impact Summary --}}
+                <div class="p-3.5 rounded-lg border border-amber-500/30 bg-amber-500/10 space-y-2.5">
+                    <div class="flex items-center gap-2 text-xs font-semibold text-amber-500">
+                        <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        Associated Records &amp; Course History Impact:
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="p-2 rounded bg-surface-card border border-border-default/60">
+                            <div class="text-text-muted text-[11px]">Assigned Courses</div>
+                            <div class="font-bold text-text-primary text-sm">{{ $deletingTrainerImpact['assigned_courses_count'] ?? 0 }}</div>
+                        </div>
+                        <div class="p-2 rounded bg-surface-card border border-border-default/60">
+                            <div class="text-text-muted text-[11px]">Evaluations Recorded</div>
+                            <div class="font-bold text-text-primary text-sm">{{ $deletingTrainerImpact['evaluations_count'] ?? 0 }}</div>
+                        </div>
+                    </div>
+
+                    @if (!empty($deletingTrainerImpact['assigned_courses']))
+                        <div class="pt-1">
+                            <div class="text-[11px] font-semibold text-text-muted mb-1">Assigned Courses:</div>
+                            <ul class="space-y-1 text-xs">
+                                @foreach ($deletingTrainerImpact['assigned_courses'] as $c)
+                                    <li class="flex items-center justify-between text-text-secondary">
+                                        <span>• {{ $c['title'] }}</span>
+                                        <span class="text-[10px] text-text-muted uppercase">({{ $c['status'] }})</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    <p class="text-[11px] text-text-secondary leading-relaxed pt-1">
+                        <strong>Policy Note:</strong> Reassigning courses to another trainer must be done as a separate explicit action. Deleting this account will deactivate authentication access while preserving historical authorship, course content, evaluations, grade publications, and audit logs.
+                    </p>
+                </div>
+            </div>
+        @endif
+
+        <x-slot:footer>
+            <div class="flex items-center justify-end gap-2.5 w-full">
+                <x-button variant="secondary" type="button" wire:click="cancelDelete">
+                    Cancel
+                </x-button>
+                <x-button variant="danger" type="button" wire:click="confirmDeleteTrainer" wire:loading.attr="disabled">
+                    <span wire:loading.remove wire:target="confirmDeleteTrainer">Delete Trainer Account</span>
+                    <span wire:loading wire:target="confirmDeleteTrainer">Deleting...</span>
+                </x-button>
+            </div>
+        </x-slot:footer>
     </x-modal>
 </div>

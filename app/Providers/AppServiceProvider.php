@@ -11,6 +11,8 @@ use App\Domain\AI\Services\Providers\NullAiProvider;
 use App\Domain\AI\Services\Providers\OpenAiCompatibleProvider;
 use App\Domain\Assignments\Models\Assignment;
 use App\Domain\Assignments\Policies\AssignmentPolicy;
+use App\Domain\Certificates\Models\Certificate;
+use App\Domain\Certificates\Policies\CertificatePolicy;
 use App\Domain\Courses\Models\Course;
 use App\Domain\Courses\Models\CourseCategory;
 use App\Domain\Courses\Models\Module;
@@ -71,6 +73,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Gate::policy(Academy::class, AcademyPolicy::class);
         Gate::policy(AcademyUser::class, AcademyUserPolicy::class);
+        Gate::policy(Certificate::class, CertificatePolicy::class);
         Gate::policy(Course::class, CoursePolicy::class);
         Gate::policy(CourseCategory::class, CourseCategoryPolicy::class);
         Gate::policy(Enrollment::class, EnrollmentPolicy::class);

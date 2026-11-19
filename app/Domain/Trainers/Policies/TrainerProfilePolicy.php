@@ -40,4 +40,9 @@ class TrainerProfilePolicy
     {
         return $user->is_active && $user->hasRole('admin');
     }
+
+    public function restore(User $user, TrainerProfile $trainerProfile): bool
+    {
+        return $user->is_active && $user->hasRole('admin');
+    }
 }

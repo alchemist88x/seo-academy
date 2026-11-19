@@ -51,6 +51,7 @@
                     :options="[
                         'active' => 'Active',
                         'suspended' => 'Suspended',
+                        'deleted' => 'Deleted',
                     ]"
                 />
             </div>
@@ -194,9 +195,15 @@
                                 {{ $student->enrolled_at?->format('M d, Y') ?? '—' }}
                             </td>
                             <td>
-                                <x-badge :color="$student->active ? 'green' : 'red'" size="sm">
-                                    {{ $student->active ? 'Active' : 'Suspended' }}
-                                </x-badge>
+                                @if ($student->trashed())
+                                    <x-badge color="red" size="sm">
+                                        Deleted
+                                    </x-badge>
+                                @else
+                                    <x-badge :color="$student->active ? 'green' : 'red'" size="sm">
+                                        {{ $student->active ? 'Active' : 'Suspended' }}
+                                    </x-badge>
+                                @endif
                             </td>
                             <td class="text-right">
                                 <div class="inline-flex items-center justify-end gap-1.5">
@@ -206,31 +213,57 @@
                                         </x-button>
                                     @endcan
 
-                                    @can('update', $student)
-                                        <x-button variant="secondary" size="xs" wire:click="openEditModal('{{ $student->id }}')" title="Edit Student Profile">
-                                            Edit
-                                        </x-button>
-
-                                        @if ($student->active)
-                                            <x-button
-                                                variant="danger"
-                                                size="xs"
-                                                wire:click="promptSuspend('{{ $student->id }}')"
-                                                title="Suspend Account Access"
-                                            >
-                                                Suspend
-                                            </x-button>
-                                        @else
+                                    @if ($student->trashed())
+                                        @can('restore', $student)
                                             <x-button
                                                 variant="primary"
                                                 size="xs"
-                                                wire:click="toggleActive('{{ $student->id }}')"
-                                                title="Reactivate Account Access"
+                                                wire:click="restoreStudent('{{ $student->id }}')"
+                                                title="Restore Student Account"
                                             >
-                                                Reactivate
+                                                Restore
                                             </x-button>
-                                        @endif
-                                    @endcan
+                                        @endcan
+                                    @else
+                                        @can('update', $student)
+                                            <x-button variant="secondary" size="xs" wire:click="openEditModal('{{ $student->id }}')" title="Edit Student Profile">
+                                                Edit
+                                            </x-button>
+
+                                            @if ($student->active)
+                                                <x-button
+                                                    variant="ghost"
+                                                    size="xs"
+                                                    wire:click="promptSuspend('{{ $student->id }}')"
+                                                    title="Suspend Account Access"
+                                                    class="text-amber-500 hover:text-amber-600"
+                                                >
+                                                    Suspend
+                                                </x-button>
+                                            @else
+                                                <x-button
+                                                    variant="ghost"
+                                                    size="xs"
+                                                    wire:click="toggleActive('{{ $student->id }}')"
+                                                    title="Reactivate Account Access"
+                                                    class="text-emerald-500 hover:text-emerald-600"
+                                                >
+                                                    Reactivate
+                                                </x-button>
+                                            @endif
+                                        @endcan
+
+                                        @can('delete', $student)
+                                            <x-button
+                                                variant="danger"
+                                                size="xs"
+                                                wire:click="openDeleteModal('{{ $student->id }}')"
+                                                title="Delete Student Account"
+                                            >
+                                                Delete
+                                            </x-button>
+                                        @endcan
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -711,6 +744,80 @@
             <x-button variant="secondary" type="button" x-on:click="$dispatch('close-modal', 'student-import-modal')">
                 Close
             </x-button>
+        </x-slot:footer>
+    </x-modal>
+
+    {{-- Delete Student Confirmation Modal --}}
+    <x-modal
+        name="student-delete-modal"
+        title="Delete Student Account"
+        description="Safely deactivate and soft-delete student profile while preserving historical academic records."
+        maxWidth="md"
+    >
+        @if ($deletingStudentProfile)
+            <div class="space-y-4">
+                <div class="p-3.5 rounded-lg bg-surface-elevated border border-border-default space-y-1.5 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-text-muted">Student:</span>
+                        <span class="font-semibold text-text-primary">{{ $deletingStudentProfile->user?->name }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-text-muted">Email:</span>
+                        <span class="font-mono text-text-secondary">{{ $deletingStudentProfile->user?->email }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-text-muted">Student ID:</span>
+                        <span class="font-mono text-text-secondary">{{ $deletingStudentProfile->student_code }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-text-muted">Proficiency:</span>
+                        <span class="capitalize text-text-primary font-medium">{{ $deletingStudentProfile->proficiency_label }}</span>
+                    </div>
+                </div>
+
+                {{-- Related Record Impact Summary --}}
+                <div class="p-3.5 rounded-lg border border-amber-500/30 bg-amber-500/10 space-y-2">
+                    <div class="flex items-center gap-2 text-xs font-semibold text-amber-500">
+                        <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        Related Records &amp; Academic History Impact:
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="p-2 rounded bg-surface-card border border-border-default/60">
+                            <div class="text-text-muted text-[11px]">Enrollments</div>
+                            <div class="font-bold text-text-primary text-sm">{{ $deletingStudentImpact['enrollments_count'] ?? 0 }}</div>
+                        </div>
+                        <div class="p-2 rounded bg-surface-card border border-border-default/60">
+                            <div class="text-text-muted text-[11px]">Assessment Attempts</div>
+                            <div class="font-bold text-text-primary text-sm">{{ $deletingStudentImpact['assessment_attempts_count'] ?? 0 }}</div>
+                        </div>
+                        <div class="p-2 rounded bg-surface-card border border-border-default/60">
+                            <div class="text-text-muted text-[11px]">Assignment Submissions</div>
+                            <div class="font-bold text-text-primary text-sm">{{ $deletingStudentImpact['assignment_submissions_count'] ?? 0 }}</div>
+                        </div>
+                        <div class="p-2 rounded bg-surface-card border border-border-default/60">
+                            <div class="text-text-muted text-[11px]">Certificates Issued</div>
+                            <div class="font-bold text-text-primary text-sm">{{ $deletingStudentImpact['certificates_count'] ?? 0 }}</div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-text-secondary leading-relaxed pt-1">
+                        <strong>Consequences:</strong> Deleting this student account immediately removes authentication and login access. All enrolled courses, submissions, grades, transcripts, and certificates are permanently preserved. Only administrators can restore this account.
+                    </p>
+                </div>
+            </div>
+        @endif
+
+        <x-slot:footer>
+            <div class="flex items-center justify-end gap-2.5 w-full">
+                <x-button variant="secondary" type="button" wire:click="cancelDelete">
+                    Cancel
+                </x-button>
+                <x-button variant="danger" type="button" wire:click="confirmDeleteStudent" wire:loading.attr="disabled">
+                    <span wire:loading.remove wire:target="confirmDeleteStudent">Delete Student Account</span>
+                    <span wire:loading wire:target="confirmDeleteStudent">Deleting...</span>
+                </x-button>
+            </div>
         </x-slot:footer>
     </x-modal>
 </div>

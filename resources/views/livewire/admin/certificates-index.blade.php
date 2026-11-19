@@ -69,6 +69,9 @@
                     <option value="">All Statuses</option>
                     <option value="Issued">Issued</option>
                     <option value="Revoked">Revoked</option>
+                    <option value="Reinstated">Reinstated</option>
+                    <option value="Under Audit">Under Audit</option>
+                    <option value="Superseded">Superseded</option>
                 </select>
             </div>
         </div>
@@ -117,6 +120,10 @@
                                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200">
                                             Revoked
                                         </span>
+                                    @elseif ($cert->isReinstated())
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200">
+                                            Reinstated (v{{ $cert->version }})
+                                        </span>
                                     @elseif ($cert->isSuperseded())
                                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-300">
                                             Superseded (v{{ $cert->version }})
@@ -157,13 +164,30 @@
                                 @endif
                                 <button
                                     type="button"
+                                    wire:click="viewIssuanceHistory('{{ $cert->id }}')"
+                                    class="text-xs text-primary-600 hover:underline"
+                                    title="View Issuance Snapshot &amp; History"
+                                >
+                                    Details
+                                </button>
+                                <button
+                                    type="button"
                                     wire:click="viewAuditHistory('{{ $cert->id }}')"
                                     class="text-xs text-slate-500 hover:underline"
                                 >
                                     Audit
                                 </button>
                                 @if ($isAdmin)
-                                    @if (! $cert->isRevoked() && ! $cert->isSuperseded())
+                                    @if ($cert->isRevoked())
+                                        <button
+                                            type="button"
+                                            wire:click="promptReinstate('{{ $cert->id }}')"
+                                            class="text-xs font-semibold text-emerald-600 hover:underline"
+                                            title="Reinstate this revoked certificate"
+                                        >
+                                            Reinstate
+                                        </button>
+                                    @elseif (! $cert->isSuperseded())
                                         <button
                                             type="button"
                                             wire:click="promptRevoke('{{ $cert->id }}')"
@@ -235,6 +259,145 @@
                     </button>
                     <button type="button" wire:click="confirmRevoke" class="btn btn-danger btn-sm">
                         Confirm Revocation
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Reinstatement Modal --}}
+    @if ($showReinstateModal)
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div class="bg-surface-primary border border-border-default rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+                <div class="flex items-center justify-between pb-2 border-b border-border-default">
+                    <h3 class="text-lg font-bold text-text-primary">Reinstate Certificate</h3>
+                    <button type="button" wire:click="cancelReinstate" class="text-text-muted hover:text-text-primary">&times;</button>
+                </div>
+
+                @if ($reinstatingCertificate)
+                    <div class="p-3 rounded-lg bg-surface-secondary text-xs space-y-1">
+                        <div class="flex justify-between">
+                            <span class="text-text-muted">Certificate #:</span>
+                            <span class="font-mono font-semibold text-text-primary">{{ $reinstatingCertificate->certificate_number }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-text-muted">Student:</span>
+                            <span class="text-text-primary">{{ $reinstatingCertificate->user?->name }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-text-muted">Course:</span>
+                            <span class="text-text-primary">{{ $reinstatingCertificate->course?->title }}</span>
+                        </div>
+                    </div>
+                @endif
+
+                <p class="text-xs text-text-muted leading-relaxed">
+                    Reinstating this certificate will restore its status to <strong>Reinstated</strong>. The public verification page will reflect the active, authenticated credential, and an immutable audit event will be recorded.
+                </p>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Mandatory Reinstatement Reason *</label>
+                    <textarea
+                        wire:model="reinstatementReason"
+                        rows="3"
+                        class="w-full text-sm rounded-lg border-border-default bg-surface-primary text-text-primary"
+                        placeholder="e.g. Administrative review complete, mistaken revocation corrected, identity re-verified"
+                    ></textarea>
+                    @error('reinstatementReason') <span class="text-xs text-rose-500">{{ $message }}</span> @enderror
+                </div>
+
+                <div class="flex items-center justify-end space-x-3 pt-3 border-t border-border-default">
+                    <button type="button" wire:click="cancelReinstate" class="btn btn-secondary btn-sm">
+                        Cancel
+                    </button>
+                    <button type="button" wire:click="confirmReinstate" class="btn btn-primary btn-sm">
+                        Confirm Reinstatement
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Issuance History & Details Modal --}}
+    @if ($showIssuanceHistoryModal && $viewingCertificate)
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+            <div class="bg-surface-primary border border-border-default rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-border-default">
+                    <h3 class="text-lg font-bold text-text-primary">Certificate Issuance Details</h3>
+                    <button type="button" wire:click="closeIssuanceHistory" class="text-text-muted hover:text-text-primary">&times;</button>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <div class="p-3 rounded-lg bg-surface-secondary space-y-1.5">
+                        <div class="flex justify-between">
+                            <span class="text-text-muted">Certificate Number:</span>
+                            <span class="font-mono font-bold text-text-primary">{{ $viewingCertificate->certificate_number }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-text-muted">Status:</span>
+                            <span class="font-semibold uppercase tracking-wider {{ $viewingCertificate->isRevoked() ? 'text-rose-500' : 'text-emerald-500' }}">
+                                {{ $viewingCertificate->status }}
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-text-muted">Version:</span>
+                            <span class="font-mono text-text-primary">v{{ $viewingCertificate->version ?? 1 }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-text-muted">Student:</span>
+                            <span class="font-medium text-text-primary">{{ $viewingCertificate->user?->name }} ({{ $viewingCertificate->user?->email }})</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-text-muted">Course:</span>
+                            <span class="text-text-primary font-medium">{{ $viewingCertificate->course?->title }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-text-muted">Issued Date:</span>
+                            <span class="text-text-primary">{{ $viewingCertificate->issued_at?->format('F d, Y') ?? '—' }}</span>
+                        </div>
+                        @if ($viewingCertificate->revoked_at)
+                            <div class="flex justify-between text-rose-500">
+                                <span>Revoked Date:</span>
+                                <span>{{ $viewingCertificate->revoked_at->format('F d, Y H:i:s') }}</span>
+                            </div>
+                            <div class="pt-1">
+                                <span class="text-text-muted">Revocation Reason:</span>
+                                <p class="text-rose-600 dark:text-rose-400 italic mt-0.5">{{ $viewingCertificate->revocation_reason }}</p>
+                            </div>
+                        @endif
+                        @if ($viewingCertificate->reinstated_at)
+                            <div class="flex justify-between text-sky-500">
+                                <span>Reinstated Date:</span>
+                                <span>{{ $viewingCertificate->reinstated_at->format('F d, Y H:i:s') }}</span>
+                            </div>
+                            <div class="pt-1">
+                                <span class="text-text-muted">Reinstatement Reason:</span>
+                                <p class="text-sky-600 dark:text-sky-400 italic mt-0.5">{{ $viewingCertificate->reinstatement_reason }}</p>
+                            </div>
+                        @endif
+                    </div>
+
+                    @if (!empty($viewingCertificate->issuance_snapshot))
+                        <div class="p-3 rounded-lg bg-surface-secondary border border-border-default/60 space-y-1">
+                            <div class="font-semibold text-text-primary mb-1">Issuance Snapshot Data:</div>
+                            <div class="text-[11px] text-text-muted space-y-0.5">
+                                @if (isset($viewingCertificate->issuance_snapshot['student']))
+                                    <div>Student Name on Certificate: <strong class="text-text-secondary">{{ $viewingCertificate->issuance_snapshot['student']['name'] ?? '—' }}</strong></div>
+                                @endif
+                                @if (isset($viewingCertificate->issuance_snapshot['course']))
+                                    <div>Course Title on Certificate: <strong class="text-text-secondary">{{ $viewingCertificate->issuance_snapshot['course']['title'] ?? '—' }}</strong></div>
+                                @endif
+                                @if (isset($viewingCertificate->issuance_snapshot['grade']))
+                                    <div>Final Score / Grade: <strong class="text-text-secondary">{{ $viewingCertificate->issuance_snapshot['grade']['final_score'] ?? '—' }}%</strong></div>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
+                </div>
+
+                <div class="flex justify-end pt-3 border-t border-border-default">
+                    <button type="button" wire:click="closeIssuanceHistory" class="btn btn-secondary btn-sm">
+                        Close
                     </button>
                 </div>
             </div>
@@ -363,7 +526,7 @@
                     <button
                         type="button"
                         wire:click="issueCertificateForEnrollment"
-                        :disabled="$eligibleEnrollments->isEmpty()"
+                        @disabled($eligibleEnrollments->isEmpty())
                         class="btn btn-primary btn-sm"
                     >
                         Issue Certificate

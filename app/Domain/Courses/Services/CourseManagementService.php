@@ -7,6 +7,7 @@ use App\Domain\Courses\Models\Course;
 use App\Domain\Courses\Models\CourseCategory;
 use App\Domain\Platform\Concerns\RecordsAuditLog;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
@@ -320,15 +321,125 @@ class CourseManagementService
         });
     }
 
+    /**
+     * Archive an active course, preventing new enrollments while preserving existing student access.
+     *
+     * @throws AuthorizationException
+     */
+    public function archive(Course $course, User $actor): Course
+    {
+        if (! $actor->is_active || ! $actor->hasRole('admin')) {
+            throw new AuthorizationException('Unauthorized: Only administrators may archive courses.');
+        }
+
+        return $this->transitionStatus($course, 'Archived', $actor);
+    }
+
+    /**
+     * Restore an archived course back to Draft or Published.
+     *
+     * @throws AuthorizationException
+     * @throws ValidationException
+     */
+    public function restoreArchived(Course $course, User $actor, string $targetStatus = 'Draft'): Course
+    {
+        if (! $actor->is_active || ! $actor->hasRole('admin')) {
+            throw new AuthorizationException('Unauthorized: Only administrators may restore archived courses.');
+        }
+
+        if ($course->status !== 'Archived') {
+            throw ValidationException::withMessages([
+                'course' => 'Only archived courses can be restored.',
+            ]);
+        }
+
+        if (! in_array($targetStatus, ['Draft', 'Published'], true)) {
+            $targetStatus = 'Draft';
+        }
+
+        return $this->transitionStatus($course, $targetStatus, $actor);
+    }
+
+    /**
+     * Compute impact summary and determine if course is eligible for safe permanent deletion.
+     *
+     * @return array{enrollments_count: int, active_enrollments_count: int, modules_count: int, lessons_count: int, quizzes_count: int, assignments_count: int, certificates_count: int, has_academic_history: bool, can_delete_permanently: bool, blocking_reasons: array<int, string>}
+     */
+    public function getImpactSummary(Course $course): array
+    {
+        $courseId = $course->getKey();
+
+        $enrollmentsCount = $course->enrollments()->count();
+        $activeEnrollmentsCount = $course->enrollments()->whereIn('status', ['active', 'Active'])->count();
+        $modulesCount = $course->modules()->count();
+        $lessonsCount = $course->lessons()->count();
+        $quizzesCount = $course->quizzes()->count();
+        $assignmentsCount = DB::table('assignments')->where('course_id', $courseId)->count();
+        $certificatesCount = $course->certificates()->count();
+
+        // Check for gradebook or submission records
+        $hasGrades = DB::table('enrollment_final_grades')
+            ->join('enrollments', 'enrollment_final_grades.enrollment_id', '=', 'enrollments.id')
+            ->where('enrollments.course_id', $courseId)
+            ->exists();
+
+        $hasSubmissions = false;
+        if ($assignmentsCount > 0) {
+            $hasSubmissions = DB::table('assignment_submissions')
+                ->join('assignments', 'assignment_submissions.assignment_id', '=', 'assignments.id')
+                ->where('assignments.course_id', $courseId)
+                ->exists();
+        }
+
+        $blockingReasons = [];
+        if ($enrollmentsCount > 0) {
+            $blockingReasons[] = "Course has {$enrollmentsCount} student enrollment(s).";
+        }
+        if ($certificatesCount > 0) {
+            $blockingReasons[] = "Course has {$certificatesCount} issued certificate(s).";
+        }
+        if ($hasGrades) {
+            $blockingReasons[] = 'Course has recorded final grades in the immutable gradebook.';
+        }
+        if ($hasSubmissions) {
+            $blockingReasons[] = 'Course has student assignment submissions.';
+        }
+
+        $hasAcademicHistory = count($blockingReasons) > 0;
+
+        return [
+            'enrollments_count' => $enrollmentsCount,
+            'active_enrollments_count' => $activeEnrollmentsCount,
+            'modules_count' => $modulesCount,
+            'lessons_count' => $lessonsCount,
+            'quizzes_count' => $quizzesCount,
+            'assignments_count' => $assignmentsCount,
+            'certificates_count' => $certificatesCount,
+            'has_academic_history' => $hasAcademicHistory,
+            'can_delete_permanently' => ! $hasAcademicHistory,
+            'blocking_reasons' => $blockingReasons,
+        ];
+    }
+
+    /**
+     * Delete an eligible course only when no protected historical records or dependencies exist.
+     * Courses with student enrollments, certificates, or grades cannot be permanently deleted.
+     *
+     * @throws AuthorizationException
+     * @throws ValidationException
+     */
     public function delete(Course $course, User $actor, bool $force = false): void
     {
-        $activeEnrollments = $course->enrollments()
-            ->whereIn('status', ['active', 'completed'])
-            ->count();
+        if (! $actor->is_active || ! $actor->hasRole('admin')) {
+            throw new AuthorizationException('Unauthorized: Only administrators may delete courses.');
+        }
 
-        if ($activeEnrollments > 0 && ! $force) {
+        $impact = $this->getImpactSummary($course);
+
+        if (! $impact['can_delete_permanently'] && ! $force) {
+            $reasons = implode(' ', $impact['blocking_reasons']);
             throw ValidationException::withMessages([
-                'course' => "Cannot delete course '{$course->title}' because it has {$activeEnrollments} active or completed student enrollment(s). Archive the course instead or remove active enrollments first.",
+                'course' => "Cannot permanently delete course '{$course->title}' because protected academic records exist: {$reasons} Archive the course instead to protect student history.",
             ]);
         }
 
@@ -347,6 +458,12 @@ class CourseManagementService
             $courseTitle = $course->title;
             $academy = $course->academy;
             $courseId = (string) $course->getKey();
+
+            // If empty draft course has structure with no external student submissions, clean up modules/lessons
+            foreach ($course->modules as $module) {
+                $module->lessons()->delete();
+                $module->delete();
+            }
 
             $course->delete();
 

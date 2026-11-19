@@ -28,7 +28,23 @@ class CertificatesIndex extends Component
 
     public ?string $revokingCertificateId = null;
 
+    public ?Certificate $revokingCertificate = null;
+
     public string $revocationReason = '';
+
+    // Reinstatement Modal State
+    public bool $showReinstateModal = false;
+
+    public ?string $reinstatingCertificateId = null;
+
+    public ?Certificate $reinstatingCertificate = null;
+
+    public string $reinstatementReason = '';
+
+    // Issuance History Modal State
+    public bool $showIssuanceHistoryModal = false;
+
+    public ?Certificate $viewingCertificate = null;
 
     // Reissuance Modal State
     public bool $showReissueModal = false;
@@ -137,6 +153,7 @@ class CertificatesIndex extends Component
         }
 
         $this->revokingCertificateId = $certificateId;
+        $this->revokingCertificate = Certificate::with(['user', 'course'])->find($certificateId);
         $this->revocationReason = '';
         $this->showRevokeModal = true;
     }
@@ -144,8 +161,61 @@ class CertificatesIndex extends Component
     public function cancelRevoke(): void
     {
         $this->revokingCertificateId = null;
+        $this->revokingCertificate = null;
         $this->revocationReason = '';
         $this->showRevokeModal = false;
+    }
+
+    public function promptReinstate(string $certificateId): void
+    {
+        if (! Auth::user()?->hasRole('admin')) {
+            abort(403, 'Unauthorized: Only administrators may reinstate certificates.');
+        }
+
+        $this->reinstatingCertificateId = $certificateId;
+        $this->reinstatingCertificate = Certificate::with(['user', 'course'])->find($certificateId);
+        $this->reinstatementReason = '';
+        $this->showReinstateModal = true;
+    }
+
+    public function cancelReinstate(): void
+    {
+        $this->reinstatingCertificateId = null;
+        $this->reinstatingCertificate = null;
+        $this->reinstatementReason = '';
+        $this->showReinstateModal = false;
+    }
+
+    public function confirmReinstate(CertificateIssuanceService $issuanceService): void
+    {
+        if (! Auth::user()?->hasRole('admin')) {
+            abort(403, 'Unauthorized: Only administrators may reinstate certificates.');
+        }
+
+        $this->validate([
+            'reinstatementReason' => ['required', 'string', 'min:3', 'max:1000'],
+        ]);
+
+        $certificate = Certificate::findOrFail($this->reinstatingCertificateId);
+        $issuanceService->reinstateCertificate($certificate, Auth::user(), $this->reinstatementReason);
+
+        $this->cancelReinstate();
+        session()->flash('success', "Certificate {$certificate->certificate_number} has been reinstated.");
+    }
+
+    public function viewIssuanceHistory(string $certificateId): void
+    {
+        $this->viewingCertificate = Certificate::query()
+            ->with(['user', 'course.academy', 'enrollment', 'supersededBy', 'supersedes'])
+            ->findOrFail($certificateId);
+
+        $this->showIssuanceHistoryModal = true;
+    }
+
+    public function closeIssuanceHistory(): void
+    {
+        $this->viewingCertificate = null;
+        $this->showIssuanceHistoryModal = false;
     }
 
     public function confirmRevoke(CertificateIssuanceService $issuanceService): void

@@ -328,6 +328,30 @@ class CertificateIssuanceService
     }
 
     /**
+     * Safely delete an unissued/draft certificate record.
+     * Issued, revoked, or audited certificates cannot be permanently deleted.
+     *
+     * @throws AuthorizationException
+     * @throws \DomainException
+     */
+    public function deleteCertificate(Certificate $certificate, User $actor): void
+    {
+        if (! $actor->is_active || ! $actor->hasRole('admin')) {
+            throw new AuthorizationException('Unauthorized: Only administrators may delete certificates.');
+        }
+
+        if (in_array(strtolower((string) $certificate->status), ['issued', 'revoked', 'reinstated'], true) || $certificate->issued_at !== null) {
+            throw new \DomainException("Issued or revoked certificate {$certificate->certificate_number} cannot be permanently deleted. Revoke the certificate instead to preserve credential audit history.");
+        }
+
+        if ($certificate->auditEvents()->exists()) {
+            throw new \DomainException("Certificate {$certificate->certificate_number} has audit history and cannot be deleted.");
+        }
+
+        $certificate->delete();
+    }
+
+    /**
      * Regenerate certificate PDF (or re-issue with updated template/branding).
      */
     public function regenerateCertificate(Certificate $certificate, ?string $newTemplate = null): Certificate

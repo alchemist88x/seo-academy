@@ -249,11 +249,22 @@
                                             <x-button
                                                 variant="secondary"
                                                 size="sm"
-                                                wire:click="transitionStatus('{{ $course->id }}', 'Archived')"
+                                                wire:click="openArchiveModal('{{ $course->id }}')"
                                                 wire:loading.attr="disabled"
                                             >
                                                 Archive
                                             </x-button>
+                                        @else
+                                            @can('restore', $course)
+                                                <x-button
+                                                    variant="primary"
+                                                    size="sm"
+                                                    wire:click="restoreCourse('{{ $course->id }}')"
+                                                    wire:loading.attr="disabled"
+                                                >
+                                                    Restore
+                                                </x-button>
+                                            @endcan
                                         @endif
                                     @endcan
 
@@ -572,37 +583,145 @@
         </div>
     </x-modal>
 
+    {{-- Archive Course Modal --}}
+    <x-modal name="course-archive-modal" title="Archive Course" maxWidth="md">
+        @if ($archivingCourse)
+            <div class="space-y-4">
+                <div class="p-3.5 rounded-lg bg-surface-elevated border border-border-default space-y-1.5 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-text-muted">Course Title:</span>
+                        <span class="font-semibold text-text-primary">{{ $archivingCourse->title }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-text-muted">Current Status:</span>
+                        <x-badge color="green">{{ $archivingCourse->status }}</x-badge>
+                    </div>
+                </div>
+
+                <div class="p-3.5 rounded-lg border border-amber-500/30 bg-amber-500/10 space-y-2 text-xs text-text-secondary leading-relaxed">
+                    <p class="font-semibold text-amber-500 flex items-center gap-1.5">
+                        <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Archiving Policy &amp; Behavior:
+                    </p>
+                    <p>
+                        Archiving this course prevents new student enrollments. However, currently enrolled students will continue to access their learning materials according to their existing enrollment validity.
+                    </p>
+                    <p>
+                        All modules, lessons, quizzes, grade history, transcripts, and issued certificates will be permanently preserved. You can restore an archived course at any time.
+                    </p>
+                </div>
+
+                <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-border-default">
+                    <x-button variant="secondary" size="sm" type="button" wire:click="cancelArchive">
+                        Cancel
+                    </x-button>
+                    <x-button
+                        variant="primary"
+                        size="sm"
+                        type="button"
+                        wire:click="confirmArchiveCourse"
+                        wire:loading.attr="disabled"
+                    >
+                        <span wire:loading.remove wire:target="confirmArchiveCourse">Archive Course</span>
+                        <span wire:loading wire:target="confirmArchiveCourse">Archiving...</span>
+                    </x-button>
+                </div>
+            </div>
+        @endif
+    </x-modal>
+
     {{-- Safe Delete Course Modal --}}
     <x-modal name="course-delete-modal" title="Delete Course" maxWidth="md">
         <div class="space-y-4">
-            <div class="p-4 rounded-xl bg-danger-50 dark:bg-danger-950/30 border border-danger-200 dark:border-danger-800 text-danger-700 dark:text-danger-300 text-xs space-y-2">
-                <p class="font-bold">Are you sure you want to permanently delete this course?</p>
-                <p class="font-mono text-sm text-text-primary">{{ $deletingCourseTitle }}</p>
-                @if ($deletingCourseEnrollmentsCount > 0)
-                    <p class="font-semibold text-rose-600 dark:text-rose-400">
-                        Warning: This course currently has {{ $deletingCourseEnrollmentsCount }} active or completed student enrollment(s). Deletion is blocked to protect student history. Please archive the course instead.
-                    </p>
-                @else
-                    <p class="text-text-secondary">
-                        This action will delete the course, its curriculum structure, lessons, and assignments. This action cannot be undone.
-                    </p>
+            <div class="p-3.5 rounded-lg bg-surface-elevated border border-border-default space-y-1.5 text-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-text-muted">Course:</span>
+                    <span class="font-semibold text-text-primary">{{ $deletingCourseTitle }}</span>
+                </div>
+                @if ($deletingCourse)
+                    <div class="flex items-center justify-between">
+                        <span class="text-text-muted">Status:</span>
+                        <span class="font-medium text-text-secondary">{{ $deletingCourse->status }}</span>
+                    </div>
                 @endif
             </div>
 
-            <div class="flex items-center justify-end gap-3 pt-3 border-t border-border-default">
-                <x-button variant="secondary" size="sm" type="button" @click="open = false">
+            {{-- Related Record Impact Summary --}}
+            <div class="p-3.5 rounded-lg border border-border-default bg-surface-card space-y-2.5">
+                <div class="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                    <svg class="w-4 h-4 text-primary-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                    Course Structure &amp; Historical Records Impact:
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="p-2 rounded bg-surface-elevated border border-border-default/60">
+                        <div class="text-text-muted text-[11px]">Enrollments</div>
+                        <div class="font-bold text-text-primary text-sm">{{ $deletingCourseImpact['enrollments_count'] ?? 0 }}</div>
+                    </div>
+                    <div class="p-2 rounded bg-surface-elevated border border-border-default/60">
+                        <div class="text-text-muted text-[11px]">Modules / Lessons</div>
+                        <div class="font-bold text-text-primary text-sm">{{ $deletingCourseImpact['modules_count'] ?? 0 }} / {{ $deletingCourseImpact['lessons_count'] ?? 0 }}</div>
+                    </div>
+                    <div class="p-2 rounded bg-surface-elevated border border-border-default/60">
+                        <div class="text-text-muted text-[11px]">Quizzes / Assignments</div>
+                        <div class="font-bold text-text-primary text-sm">{{ $deletingCourseImpact['quizzes_count'] ?? 0 }} / {{ $deletingCourseImpact['assignments_count'] ?? 0 }}</div>
+                    </div>
+                    <div class="p-2 rounded bg-surface-elevated border border-border-default/60">
+                        <div class="text-text-muted text-[11px]">Certificates Issued</div>
+                        <div class="font-bold text-text-primary text-sm">{{ $deletingCourseImpact['certificates_count'] ?? 0 }}</div>
+                    </div>
+                </div>
+
+                @if (!empty($deletingCourseImpact['has_academic_history']))
+                    <div class="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-500 space-y-1">
+                        <div class="font-bold flex items-center gap-1.5">
+                            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                            Permanent Deletion Blocked
+                        </div>
+                        <p class="text-[11px] text-text-secondary leading-relaxed">
+                            This course cannot be permanently deleted because protected historical records and student enrollments exist. Archiving this course will prevent new enrollments while safeguarding student transcripts, certificates, and academic records.
+                        </p>
+                    </div>
+                @else
+                    <div class="p-2.5 rounded bg-surface-elevated border border-border-default text-xs text-text-muted">
+                        No protected student academic history exists for this course. Permanent deletion is permitted.
+                    </div>
+                @endif
+            </div>
+
+            <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-border-default">
+                <x-button variant="secondary" size="sm" type="button" wire:click="cancelDeleteCourse">
                     Cancel
                 </x-button>
-                <x-button
-                    variant="danger"
-                    size="sm"
-                    type="button"
-                    wire:click="deleteCourse"
-                    :disabled="$deletingCourseEnrollmentsCount > 0"
-                    wire:loading.attr="disabled"
-                >
-                    Confirm Delete
-                </x-button>
+
+                @if (!empty($deletingCourseImpact['has_academic_history']))
+                    <x-button
+                        variant="primary"
+                        size="sm"
+                        type="button"
+                        wire:click="confirmArchiveCourse"
+                        wire:loading.attr="disabled"
+                    >
+                        Archive Course Instead
+                    </x-button>
+                @else
+                    <x-button
+                        variant="danger"
+                        size="sm"
+                        type="button"
+                        wire:click="deleteCourse"
+                        wire:loading.attr="disabled"
+                    >
+                        <span wire:loading.remove wire:target="deleteCourse">Permanently Delete</span>
+                        <span wire:loading wire:target="deleteCourse">Deleting...</span>
+                    </x-button>
+                @endif
             </div>
         </div>
     </x-modal>

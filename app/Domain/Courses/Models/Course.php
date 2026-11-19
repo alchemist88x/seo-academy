@@ -18,11 +18,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 
 class Course extends Model
 {
-    use BelongsToAcademy, HasFactory, HasUuids;
+    use BelongsToAcademy, HasFactory, HasUuids, SoftDeletes;
 
     public const STATUSES = ['Draft', 'Published', 'Unpublished', 'Archived'];
 
@@ -149,6 +150,16 @@ class Course extends Model
     public function isPublished(): bool
     {
         return in_array($this->status, ['Published', 'Active'], true);
+    }
+
+    public function isArchived(): bool
+    {
+        return $this->status === 'Archived';
+    }
+
+    public function scopeArchived(Builder $query): Builder
+    {
+        return $query->where('status', 'Archived');
     }
 
     public function scopePublished(Builder $query): Builder

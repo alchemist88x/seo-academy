@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Models\Role;
 
 class MembershipManagementService
@@ -140,7 +141,29 @@ class MembershipManagementService
 
     public function revoke(AcademyUser $membership, User $actor): void
     {
+        if ($membership->role === 'admin' && $membership->user_id === $actor->getKey()) {
+            throw ValidationException::withMessages([
+                'membership' => 'Cannot delete or revoke the currently authenticated administrator.',
+            ]);
+        }
+
         DB::transaction(function () use ($membership, $actor): void {
+            if ($membership->role === 'admin') {
+                $otherActiveAdmins = AcademyUser::query()
+                    ->where('academy_id', $membership->academy_id)
+                    ->where('role', 'admin')
+                    ->where('status', 'active')
+                    ->where('id', '!=', $membership->getKey())
+                    ->lockForUpdate()
+                    ->count();
+
+                if ($otherActiveAdmins === 0) {
+                    throw ValidationException::withMessages([
+                        'membership' => 'Cannot revoke the last active administrator for this academy.',
+                    ]);
+                }
+            }
+
             $academy = $membership->academy;
             $membershipId = $membership->getKey();
             $targetUserId = $membership->user_id;

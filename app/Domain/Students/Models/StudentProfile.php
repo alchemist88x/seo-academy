@@ -2,6 +2,7 @@
 
 namespace App\Domain\Students\Models;
 
+use App\Domain\Certificates\Models\Certificate;
 use App\Domain\Tenants\Concerns\BelongsToAcademy;
 use App\Models\User;
 use Database\Factories\StudentProfileFactory;
@@ -12,10 +13,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class StudentProfile extends Model
 {
-    use BelongsToAcademy, HasFactory, HasUuids;
+    use BelongsToAcademy, HasFactory, HasUuids, SoftDeletes;
 
     public const PROFICIENCY_BEGINNER = 'beginner';
 
@@ -39,6 +41,7 @@ class StudentProfile extends Model
         'proficiency',
         'active',
         'notes',
+        'pre_deletion_state',
     ];
 
     protected function casts(): array
@@ -46,6 +49,7 @@ class StudentProfile extends Model
         return [
             'enrolled_at' => 'date',
             'active' => 'boolean',
+            'pre_deletion_state' => 'array',
         ];
     }
 
@@ -107,6 +111,11 @@ class StudentProfile extends Model
     public function enrollments(): HasMany
     {
         return $this->hasMany(Enrollment::class);
+    }
+
+    public function certificates(): HasMany
+    {
+        return $this->hasMany(Certificate::class, 'user_id', 'user_id');
     }
 
     public function scopeActive(Builder $query): Builder

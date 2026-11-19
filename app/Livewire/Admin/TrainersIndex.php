@@ -7,6 +7,7 @@ use App\Domain\Tenants\Services\TenantContext;
 use App\Domain\Trainers\Models\TrainerProfile;
 use App\Domain\Trainers\Services\TrainerManagementService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -35,6 +36,14 @@ class TrainersIndex extends Component
     public string $specialty = '';
 
     public string $bio = '';
+
+    // Delete modal state
+    public ?string $deletingTrainerId = null;
+
+    public ?TrainerProfile $deletingTrainerProfile = null;
+
+    /** @var array{assigned_courses?: array<int, array{id: string, title: string, status: string}>, assigned_courses_count?: int, evaluations_count?: int, result_publications_count?: int} */
+    public array $deletingTrainerImpact = [];
 
     public function mount(TenantContext $tenantContext): void
     {
@@ -155,19 +164,72 @@ class TrainersIndex extends Component
         );
     }
 
+    public function openDeleteModal(string $profileId, TenantContext $tenantContext, TrainerManagementService $service): void
+    {
+        $academy = $this->resolveAcademy($tenantContext);
+        $profile = TrainerProfile::query()
+            ->forAcademy($academy)
+            ->with('user')
+            ->findOrFail($profileId);
+
+        $this->authorize('delete', $profile);
+
+        $this->deletingTrainerId = $profileId;
+        $this->deletingTrainerProfile = $profile;
+        $this->deletingTrainerImpact = $service->getImpactSummary($profile);
+
+        $this->dispatch('open-modal', 'trainer-delete-modal');
+    }
+
+    public function cancelDelete(): void
+    {
+        $this->deletingTrainerId = null;
+        $this->deletingTrainerProfile = null;
+        $this->deletingTrainerImpact = [];
+        $this->dispatch('close-modal', 'trainer-delete-modal');
+    }
+
+    public function confirmDeleteTrainer(TenantContext $tenantContext, TrainerManagementService $service): void
+    {
+        if ($this->deletingTrainerId === null) {
+            return;
+        }
+
+        $academy = $this->resolveAcademy($tenantContext);
+        $profile = TrainerProfile::query()
+            ->forAcademy($academy)
+            ->with('user')
+            ->findOrFail($this->deletingTrainerId);
+
+        $this->authorize('delete', $profile);
+
+        try {
+            $service->delete($profile, Auth::user());
+            $this->dispatch('toast', type: 'success', message: 'Trainer account deleted. Course authorship preserved.');
+            $this->cancelDelete();
+        } catch (ValidationException $e) {
+            $msg = $e->validator->errors()->first('trainer') ?: $e->getMessage();
+            $this->dispatch('toast', type: 'error', message: $msg);
+        }
+    }
+
+    public function restoreTrainer(string $profileId, TenantContext $tenantContext, TrainerManagementService $service): void
+    {
+        $this->resolveAcademy($tenantContext);
+        $profile = TrainerProfile::onlyTrashed()->findOrFail($profileId);
+        $this->authorize('restore', $profile);
+
+        $service->restore($profileId, Auth::user());
+        $this->dispatch('toast', type: 'success', message: 'Trainer account restored and authentication access reactivated.');
+    }
+
     public function render(TenantContext $tenantContext, TrainerManagementService $service)
     {
         $academy = $this->resolveAcademy($tenantContext);
 
-        $activeFilter = match ($this->status) {
-            'active' => true,
-            'inactive' => false,
-            default => null,
-        };
-
         $trainers = $service->listForAcademy($academy, [
             'search' => $this->search,
-            'active' => $activeFilter,
+            'status' => $this->status,
         ], 15);
 
         return view('livewire.admin.trainers-index', [

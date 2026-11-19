@@ -6,9 +6,12 @@ use App\Domain\Academies\Models\Academy;
 use App\Domain\Academies\Models\AcademyUser;
 use App\Domain\Platform\Concerns\RecordsAuditLog;
 use App\Domain\Students\Models\StudentProfile;
+use App\Domain\Trainers\Models\TrainerProfile;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -25,8 +28,15 @@ class StudentManagementService
 
     public function listForAcademy(Academy $academy, array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        $query = StudentProfile::query()
-            ->forAcademy($academy)
+        $status = strtolower(trim((string) ($filters['status'] ?? '')));
+
+        $query = match ($status) {
+            'deleted' => StudentProfile::onlyTrashed(),
+            'all' => StudentProfile::withTrashed(),
+            default => StudentProfile::query(),
+        };
+
+        $query->forAcademy($academy)
             ->with(['user', 'academy', 'enrollments.course'])
             ->withCount('enrollments');
 
@@ -381,6 +391,295 @@ class StudentManagementService
             );
 
             return $profile->fresh(['user']);
+        });
+    }
+
+    /**
+     * Compute related record counts and academic impact for student deletion.
+     *
+     * @return array{enrollments_count: int, active_enrollments_count: int, assessment_attempts_count: int, assignment_submissions_count: int, certificates_count: int, total_academic_records: int}
+     */
+    public function getImpactSummary(StudentProfile $profile): array
+    {
+        $userId = $profile->user_id;
+
+        $enrollmentsCount = $profile->enrollments()->count();
+        $activeEnrollmentsCount = $profile->enrollments()->whereIn('status', ['active', 'Active'])->count();
+        $assessmentAttemptsCount = DB::table('assessment_attempts')->where('user_id', $userId)->count();
+        $assignmentSubmissionsCount = DB::table('assignment_submissions')->where('user_id', $userId)->count();
+        $certificatesCount = DB::table('certificates')->where('user_id', $userId)->count();
+
+        return [
+            'enrollments_count' => $enrollmentsCount,
+            'active_enrollments_count' => $activeEnrollmentsCount,
+            'assessment_attempts_count' => $assessmentAttemptsCount,
+            'assignment_submissions_count' => $assignmentSubmissionsCount,
+            'certificates_count' => $certificatesCount,
+            'total_academic_records' => $enrollmentsCount + $assessmentAttemptsCount + $assignmentSubmissionsCount + $certificatesCount,
+        ];
+    }
+
+    /**
+     * Determine whether the user retains other active roles or profiles in the academy.
+     */
+    protected function userHasOtherActiveRolesOrProfiles(User $user, Academy $academy, string $ignoringProfileType): bool
+    {
+        if ($user->hasRole('admin') || $user->hasRole('support_staff')) {
+            return true;
+        }
+
+        if ($ignoringProfileType === 'student') {
+            return TrainerProfile::query()
+                ->where('academy_id', $academy->getKey())
+                ->where('user_id', $user->getKey())
+                ->whereNull('deleted_at')
+                ->where('active', true)
+                ->exists();
+        }
+
+        if ($ignoringProfileType === 'trainer') {
+            return StudentProfile::query()
+                ->where('academy_id', $academy->getKey())
+                ->where('user_id', $user->getKey())
+                ->whereNull('deleted_at')
+                ->where('active', true)
+                ->exists();
+        }
+
+        return false;
+    }
+
+    /**
+     * Safely delete a student profile with authentication deactivation.
+     * Preserves all historical academic records (enrollments, grades, submissions, certificates).
+     *
+     * @throws AuthorizationException
+     * @throws ValidationException
+     */
+    public function delete(StudentProfile $profile, User $actor): void
+    {
+        if (! $actor->is_active || ! $actor->hasRole('admin')) {
+            throw new AuthorizationException('Unauthorized: Only administrators may delete students.');
+        }
+
+        if ($profile->user_id === $actor->getKey()) {
+            throw ValidationException::withMessages([
+                'student' => 'You cannot delete your own student account.',
+            ]);
+        }
+
+        // Idempotency: If already deleted, nothing to do
+        if ($profile->trashed()) {
+            return;
+        }
+
+        DB::transaction(function () use ($profile, $actor): void {
+            $lockedProfile = StudentProfile::withTrashed()->lockForUpdate()->find($profile->getKey());
+            if ($lockedProfile === null || $lockedProfile->trashed()) {
+                return;
+            }
+
+            $academy = $lockedProfile->academy;
+            $userId = $lockedProfile->user_id;
+            $user = $lockedProfile->user;
+
+            // Admin protection: Cannot delete if this user is the last active admin
+            if ($user !== null && $user->hasRole('admin')) {
+                $otherAdminsCount = User::role('admin')
+                    ->where('is_active', true)
+                    ->where('id', '!=', $user->getKey())
+                    ->lockForUpdate()
+                    ->count();
+
+                if ($otherAdminsCount === 0) {
+                    throw ValidationException::withMessages([
+                        'student' => 'Cannot delete this student account because it is the last active administrator.',
+                    ]);
+                }
+            }
+
+            $academyUser = AcademyUser::query()
+                ->where('academy_id', $lockedProfile->academy_id)
+                ->where('user_id', $userId)
+                ->first();
+
+            // Capture pre-deletion state snapshot if not already present
+            if ($lockedProfile->pre_deletion_state === null) {
+                $hasOtherActiveRoles = $user !== null && $academy !== null
+                    ? $this->userHasOtherActiveRolesOrProfiles($user, $academy, 'student')
+                    : false;
+
+                $wasActive = $user !== null ? (bool) $user->is_active : false;
+                $willDeactivateUser = (! $hasOtherActiveRoles) && $wasActive;
+
+                $lockedProfile->pre_deletion_state = [
+                    'user_is_active' => $user !== null ? (bool) $user->is_active : true,
+                    'user_suspended_at' => $user?->suspended_at?->format('Y-m-d H:i:s'),
+                    'academy_user_status' => (string) ($academyUser?->status ?? 'active'),
+                    'academy_user_suspended_at' => $academyUser?->suspended_at?->format('Y-m-d H:i:s'),
+                    'profile_active' => (bool) $lockedProfile->active,
+                    'deactivated_user' => $willDeactivateUser,
+                    'has_other_active_roles' => $hasOtherActiveRoles,
+                    'captured_at' => now()->format('Y-m-d H:i:s'),
+                ];
+                $lockedProfile->active = false;
+                $lockedProfile->save();
+            }
+
+            // Soft-delete profile
+            $lockedProfile->delete();
+
+            // Handle user and membership deactivation only if no other active roles exist
+            $snapshot = $lockedProfile->pre_deletion_state;
+            $shouldDeactivate = (bool) ($snapshot['deactivated_user'] ?? false);
+
+            if ($shouldDeactivate && $user !== null) {
+                $user->is_active = false;
+                $user->suspended_at = now();
+                $user->save();
+
+                if ($academyUser !== null) {
+                    $academyUser->status = 'suspended';
+                    $academyUser->suspended_at = now();
+                    $academyUser->save();
+                }
+            }
+
+            if ($academy !== null) {
+                $this->recordAudit(
+                    $academy,
+                    $actor,
+                    'student.deleted',
+                    StudentProfile::class,
+                    $lockedProfile->getKey(),
+                    [
+                        'student_code' => $lockedProfile->student_code,
+                        'user_id' => $userId,
+                        'user_email' => $user?->email,
+                    ],
+                );
+            }
+        });
+    }
+
+    /**
+     * Restore a soft-deleted student profile and reactivate login access.
+     *
+     * @throws AuthorizationException
+     */
+    public function restore(string $profileId, User $actor): StudentProfile
+    {
+        if (! $actor->is_active || ! $actor->hasRole('admin')) {
+            throw new AuthorizationException('Unauthorized: Only administrators may restore students.');
+        }
+
+        return DB::transaction(function () use ($profileId, $actor): StudentProfile {
+            $profile = StudentProfile::withTrashed()
+                ->lockForUpdate()
+                ->with(['user', 'academy'])
+                ->findOrFail($profileId);
+
+            if (! $profile->trashed()) {
+                return $profile;
+            }
+
+            $profile->restore();
+
+            $snapshot = $profile->pre_deletion_state;
+            $user = $profile->user;
+            $academy = $profile->academy;
+
+            if ($snapshot !== null) {
+                $origUserIsActive = (bool) ($snapshot['user_is_active'] ?? true);
+                $origUserSuspendedAt = ! empty($snapshot['user_suspended_at'])
+                    ? Carbon::parse($snapshot['user_suspended_at'])
+                    : null;
+                $origAcademyStatus = (string) ($snapshot['academy_user_status'] ?? 'active');
+                $origAcademySuspendedAt = ! empty($snapshot['academy_user_suspended_at'])
+                    ? Carbon::parse($snapshot['academy_user_suspended_at'])
+                    : null;
+                $origProfileActive = (bool) ($snapshot['profile_active'] ?? true);
+                $deactivatedUser = (bool) ($snapshot['deactivated_user'] ?? false);
+
+                // Restore profile active state and reset snapshot
+                $profile->active = $origProfileActive;
+                $profile->pre_deletion_state = null;
+                $profile->save();
+
+                // Restore user authentication and membership
+                if ($user !== null) {
+                    if ($deactivatedUser) {
+                        $user->is_active = $origUserIsActive;
+                        $user->suspended_at = $origUserSuspendedAt;
+                        $user->save();
+                    } elseif (! $origUserIsActive) {
+                        // User was already suspended prior to deletion -> preserve suspension
+                        $user->is_active = false;
+                        $user->suspended_at = $origUserSuspendedAt ?? $user->suspended_at;
+                        $user->save();
+                    }
+                }
+
+                if ($academy !== null) {
+                    if ($deactivatedUser) {
+                        AcademyUser::query()
+                            ->where('academy_id', $academy->getKey())
+                            ->where('user_id', $profile->user_id)
+                            ->update([
+                                'status' => $origAcademyStatus,
+                                'suspended_at' => $origAcademySuspendedAt,
+                                'updated_at' => now(),
+                            ]);
+                    } elseif ($origAcademyStatus === 'suspended') {
+                        AcademyUser::query()
+                            ->where('academy_id', $academy->getKey())
+                            ->where('user_id', $profile->user_id)
+                            ->update([
+                                'status' => 'suspended',
+                                'suspended_at' => $origAcademySuspendedAt,
+                                'updated_at' => now(),
+                            ]);
+                    }
+                }
+            } else {
+                // Fallback for legacy soft-deleted profiles without snapshot
+                $profile->active = true;
+                $profile->save();
+
+                if ($user !== null) {
+                    $user->is_active = true;
+                    $user->suspended_at = null;
+                    $user->save();
+                }
+
+                if ($academy !== null) {
+                    AcademyUser::query()
+                        ->where('academy_id', $academy->getKey())
+                        ->where('user_id', $profile->user_id)
+                        ->update([
+                            'status' => 'active',
+                            'suspended_at' => null,
+                            'updated_at' => now(),
+                        ]);
+                }
+            }
+
+            if ($academy !== null) {
+                $this->recordAudit(
+                    $academy,
+                    $actor,
+                    'student.restored',
+                    StudentProfile::class,
+                    $profile->getKey(),
+                    [
+                        'student_code' => $profile->student_code,
+                        'user_id' => $profile->user_id,
+                        'user_email' => $user?->email,
+                    ],
+                );
+            }
+
+            return $profile->fresh(['user', 'academy']);
         });
     }
 

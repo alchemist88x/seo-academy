@@ -85,6 +85,14 @@ class StudentProfilePolicy
     }
 
     /**
+     * Determine whether the user can restore a soft-deleted student profile.
+     */
+    public function restore(User $user, StudentProfile $studentProfile): bool
+    {
+        return $user->is_active && $user->hasRole('admin');
+    }
+
+    /**
      * Determine whether the user can export student data.
      */
     public function export(User $user, ?Academy $academy = null): bool

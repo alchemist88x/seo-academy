@@ -8,10 +8,11 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TrainerProfile extends Model
 {
-    use BelongsToAcademy, HasUuids;
+    use BelongsToAcademy, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'user_id',
@@ -19,12 +20,14 @@ class TrainerProfile extends Model
         'specialty',
         'bio',
         'active',
+        'pre_deletion_state',
     ];
 
     protected function casts(): array
     {
         return [
             'active' => 'boolean',
+            'pre_deletion_state' => 'array',
         ];
     }
 
