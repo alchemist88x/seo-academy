@@ -2,7 +2,7 @@
     "product_name":  "SEO Academy",
     "version":  "5.6.0-candidate",
     "release_channel":  "commercial-self-hosted",
-    "build_timestamp":  "2026-11-16T21:10:45+00:00",
+    "build_timestamp":  "2026-11-19T14:32:13+00:00",
     "supported_php_versions":  [
                                    "8.3",
                                    "8.4"
@@ -36,9 +36,9 @@
                             ],
     "package":  {
                     "filename":  "seo-academy-v5.6.0-candidate.zip",
-                    "size_bytes":  28436348,
+                    "size_bytes":  28436801,
                     "size_mb":  27.1,
-                    "sha256":  "a78cd80f1eec421ba71811889e3ad5d6df46afc9cb21e58cbc70963780b409d9"
+                    "sha256":  "a90c5bab9e587f66fe0542cd1e59a73c28e3453d5b650e49a3945e265ef3840d"
                 },
     "frontend_build":  {
                            "engine":  "Vite 8.3",

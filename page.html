@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="vhY1t6zp0a5BJCatRM9qcx7LB2sa5Hln2eaGCM2m">
+
+    <title>Sign In — SEO Academy</title>
+
+    <script>
+        (function () {
+            const mode = localStorage.getItem('seo_academy_theme') || 'system';
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = mode === 'dark' || (mode === 'system' && prefersDark);
+            document.documentElement.classList.toggle('dark', isDark);
+            document.documentElement.classList.toggle('light', !isDark);
+        })();
+    </script>
+
+    <link rel="preload" as="style" href="https://learn.varvy.in/build/assets/app-BdkcKdGz.css" /><link rel="modulepreload" as="script" href="https://learn.varvy.in/build/assets/app-CMN891wD.js" /><link rel="stylesheet" href="https://learn.varvy.in/build/assets/app-BdkcKdGz.css" data-navigate-track="reload" /><script type="module" src="https://learn.varvy.in/build/assets/app-CMN891wD.js" data-navigate-track="reload"></script>    <!-- Livewire Styles --><style >[wire\:loading][wire\:loading], [wire\:loading\.delay][wire\:loading\.delay], [wire\:loading\.list-item][wire\:loading\.list-item], [wire\:loading\.inline-block][wire\:loading\.inline-block], [wire\:loading\.inline][wire\:loading\.inline], [wire\:loading\.block][wire\:loading\.block], [wire\:loading\.flex][wire\:loading\.flex], [wire\:loading\.table][wire\:loading\.table], [wire\:loading\.grid][wire\:loading\.grid], [wire\:loading\.inline-flex][wire\:loading\.inline-flex] {display: none;}[wire\:loading\.delay\.none][wire\:loading\.delay\.none], [wire\:loading\.delay\.shortest][wire\:loading\.delay\.shortest], [wire\:loading\.delay\.shorter][wire\:loading\.delay\.shorter], [wire\:loading\.delay\.short][wire\:loading\.delay\.short], [wire\:loading\.delay\.default][wire\:loading\.delay\.default], [wire\:loading\.delay\.long][wire\:loading\.delay\.long], [wire\:loading\.delay\.longer][wire\:loading\.delay\.longer], [wire\:loading\.delay\.longest][wire\:loading\.delay\.longest] {display: none;}[wire\:offline][wire\:offline] {display: none;}[wire\:dirty]:not(textarea):not(input):not(select) {display: none;}:root {--livewire-progress-bar-color: #2299dd;}[x-cloak="x-cloak"],[x-cloak=""] {display: none !important;}[wire\:cloak="wire:cloak"],[wire\:cloak=""] {display: none !important;}dialog#livewire-error::backdrop {background-color: rgba(0, 0, 0, .6);}</style>
+    <script id="browser-logger-active">
+(function() {
+    const ENDPOINT = 'https://learn.varvy.in/_boost/browser-logs';
+    const logQueue = [];
+    let flushTimeout = null;
+    const captureTypes = ["error","warning","info","log","debug","table"];
+
+    console.log('🔍 Browser logger active (MCP server detected). Posting to: ' + ENDPOINT);
+
+    // Store original console methods
+    const originalConsole = {
+        log: console.log,
+        debug: console.debug,
+        info: console.info,
+        error: console.error,
+        warn: console.warn,
+        table: console.table
+    };
+
+    // Walk own enumerable keys so JSON.stringify cannot auto-invoke a proxy fake toJSON (e.g. Livewire's `$wire`) and fire a real request.
+    function toSafeValue(value, seen) {
+        if (value === null || typeof value !== 'object') {
+            return value;
+        }
+        if (value instanceof Error) {
+            return { name: value.name, message: value.message, stack: value.stack };
+        }
+        // Date has no own enumerable keys, so the walk below would collapse it to {}.
+        if (value instanceof Date) {
+            return value.toISOString();
+        }
+        if (seen.has(value)) {
+            return '[Circular]';
+        }
+        seen.add(value);
+        if (Array.isArray(value)) {
+            return value.map((item) => toSafeValue(item, seen));
+        }
+        const plain = {};
+        for (const key of Object.keys(value)) {
+            if (key === 'toJSON') continue;
+            try {
+                plain[key] = toSafeValue(value[key], seen);
+            } catch (e) {
+                plain[key] = '[Unreadable]';
+            }
+        }
+        return plain;
+    }
+
+    // Helper to safely stringify values
+    function safeStringify(obj) {
+        return JSON.stringify(toSafeValue(obj, new WeakSet()));
+    }
+
+    // Normalize log type for consistency (e.g., 'warn' to 'warning')
+    function normalizeType(type) {
+        return type === 'warn' ? 'warning' : type;
+    }
+
+    // Determine if a log type should be captured based on configured levels
+    function shouldCapture(type) {
+        return captureTypes.includes(normalizeType(type));
+    }
+
+    // Batch and send logs
+    function flushLogs() {
+        if (logQueue.length === 0) return;
+
+        const batch = logQueue.splice(0, logQueue.length);
+
+        fetch(ENDPOINT, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ logs: batch })
+        }).catch(err => {
+            // Silently fail to avoid infinite loops
+            originalConsole.error('Failed to send logs:', err);
+        });
+    }
+
+    // Debounced flush (100ms)
+    function scheduleFlush() {
+        if (flushTimeout) clearTimeout(flushTimeout);
+        flushTimeout = setTimeout(flushLogs, 100);
+    }
+
+    // Intercept console methods
+    ['log', 'debug', 'info', 'error', 'warn', 'table'].forEach(method => {
+        console[method] = function(...args) {
+            // Call original method
+            originalConsole[method].apply(console, args);
+
+            // Capture log data
+            try {
+                if (!shouldCapture(method)) {
+                    return;
+                }
+
+                logQueue.push({
+                    type: method,
+                    timestamp: new Date().toISOString(),
+                    data: args.map(arg => {
+                        try {
+                            return typeof arg === 'object' ? JSON.parse(safeStringify(arg)) : arg;
+                        } catch (e) {
+                            return String(arg);
+                        }
+                    }),
+                    url: window.location.href,
+                    userAgent: navigator.userAgent
+                });
+
+                scheduleFlush();
+            } catch (e) {
+                // Fail silently
+            }
+        };
+    });
+
+    // Global error handlers for uncaught errors
+    const originalOnError = window.onerror;
+    window.onerror = function boostErrorHandler(errorMsg, url, lineNumber, colNumber, error) {
+        try {
+            if (shouldCapture('error')) {
+                logQueue.push({
+                    type: 'uncaught_error',
+                    timestamp: new Date().toISOString(),
+                    data: [{
+                        message: errorMsg,
+                        filename: url,
+                        lineno: lineNumber,
+                        colno: colNumber,
+                        error: error ? {
+                            name: error.name,
+                            message: error.message,
+                            stack: error.stack
+                        } : null
+                    }],
+                    url: window.location.href,
+                    userAgent: navigator.userAgent
+                });
+
+                scheduleFlush();
+            }
+
+        } catch (e) {
+            // Fail silently
+        }
+
+        // Call original handler if it exists
+        if (originalOnError && typeof originalOnError === 'function') {
+            return originalOnError(errorMsg, url, lineNumber, colNumber, error);
+        }
+
+        // Let the error continue to propagate
+        return false;
+    }
+    window.addEventListener('error', (event) => {
+        try {
+            if (!shouldCapture('error')) {
+                return false;
+            }
+
+            logQueue.push({
+                type: 'window_error',
+                timestamp: new Date().toISOString(),
+                data: [{
+                    message: event.message,
+                    filename: event.filename,
+                    lineno: event.lineno,
+                    colno: event.colno,
+                    error: event.error ? {
+                        name: event.error.name,
+                        message: event.error.message,
+                        stack: event.error.stack
+                    } : null
+                }],
+                url: window.location.href,
+                userAgent: navigator.userAgent
+            });
+
+            scheduleFlush();
+        } catch (e) {
+            // Fail silently
+        }
+
+        // Let the error continue to propagate
+        return false;
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+        try {
+            if (!shouldCapture('error')) {
+                return false;
+            }
+
+            logQueue.push({
+                type: 'error',
+                timestamp: new Date().toISOString(),
+                data: [{
+                    message: 'Unhandled Promise Rejection',
+                    reason: toSafeValue(event.reason, new WeakSet())
+                }],
+                url: window.location.href,
+                userAgent: navigator.userAgent
+            });
+
+            scheduleFlush();
+        } catch (e) {
+            // Fail silently
+        }
+
+        // Let the rejection continue to propagate
+        return false;
+    });
+
+    // Flush on page unload
+    window.addEventListener('beforeunload', () => {
+        if (logQueue.length > 0) {
+            navigator.sendBeacon(ENDPOINT, JSON.stringify({ logs: logQueue }));
+        }
+    });
+})();
+</script>
+</head>
+<body class="min-h-screen bg-surface-bg text-text-primary flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 antialiased" x-data>
+    <div class="sm:mx-auto sm:w-full sm:max-w-md">
+        
+        <div class="flex justify-center">
+            <a href="https://learn.varvy.in" class="flex items-center gap-2.5">
+                <div class="h-10 w-10 rounded-xl bg-primary-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                    S
+                </div>
+                <span class="text-xl font-bold tracking-tight text-text-primary">
+                    SEO Academy
+                </span>
+            </a>
+        </div>
+    </div>
+
+    <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div class="card p-6 sm:p-8">
+            <div wire:key="lw-624528244-0" wire:snapshot="{&quot;data&quot;:{&quot;email&quot;:&quot;&quot;,&quot;password&quot;:&quot;&quot;,&quot;remember&quot;:false},&quot;memo&quot;:{&quot;id&quot;:&quot;cGvzZvv0GouRRPoo6HHh&quot;,&quot;name&quot;:&quot;auth.login&quot;,&quot;path&quot;:&quot;login&quot;,&quot;method&quot;:&quot;GET&quot;,&quot;release&quot;:&quot;a-a-a&quot;,&quot;children&quot;:[],&quot;scripts&quot;:[],&quot;assets&quot;:[],&quot;errors&quot;:[],&quot;locale&quot;:&quot;en&quot;,&quot;islands&quot;:[]},&quot;checksum&quot;:&quot;37bfc9ed220d20271ff8a42a5a148b2b85298499c52eb22141b99b9871457c6a&quot;}" wire:effects="[]" wire:id="cGvzZvv0GouRRPoo6HHh" wire:name="auth.login">
+    <div class="mb-6">
+        <h2 class="text-xl font-bold text-text-primary">Sign in to your account</h2>
+        <p class="mt-1 text-sm text-text-secondary">
+            Enter your credentials to access your SEO Academy portal.
+        </p>
+    </div>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <form method="POST" action="https://learn.varvy.in/login" wire:submit="authenticate" class="space-y-4">
+        <input type="hidden" name="_token" value="vhY1t6zp0a5BJCatRM9qcx7LB2sa5Hln2eaGCM2m" autocomplete="off">        <div class="w-full">
+    <!--[if BLOCK]><![endif]-->        <label for="email" class="form-label">
+            Email address
+            <!--[if BLOCK]><![endif]-->                <span class="text-red-500">*</span>
+            <!--[if ENDBLOCK]><![endif]-->        </label>
+    <!--[if ENDBLOCK]><![endif]-->
+    <input
+        id="email"
+        name="email"
+        type="email"
+         required         class="form-input" wire:model="email" placeholder="you@example.com" autocomplete="email"
+    />
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></div>
+
+        <div class="w-full">
+    <!--[if BLOCK]><![endif]-->        <label for="password" class="form-label">
+            Password
+            <!--[if BLOCK]><![endif]-->                <span class="text-red-500">*</span>
+            <!--[if ENDBLOCK]><![endif]-->        </label>
+    <!--[if ENDBLOCK]><![endif]-->
+    <input
+        id="password"
+        name="password"
+        type="password"
+         required         class="form-input" wire:model="password" placeholder="••••••••" autocomplete="current-password"
+    />
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></div>
+
+        <div class="flex items-center justify-between">
+            <div>
+    <div class="flex items-start gap-2.5">
+        <div class="flex items-center h-5">
+            <input
+                id="remember"
+                name="remember"
+                type="checkbox"
+                                class="h-4 w-4 rounded border-border-default text-primary-600 focus:ring-primary-500 bg-surface-card" wire:model="remember"
+            />
+        </div>
+
+        <!--[if BLOCK]><![endif]-->            <div class="text-sm leading-5">
+                <!--[if BLOCK]><![endif]-->                    <label for="remember" class="font-medium text-text-primary cursor-pointer">
+                        Remember me
+                    </label>
+                <!--[if ENDBLOCK]><![endif]-->                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->            </div>
+        <!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></div>
+        </div>
+
+        <div class="pt-2">
+            <button
+    type="submit"
+    class="btn btn-primary btn-md w-full" wire:loading.attr="disabled"
+>
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    <span wire:loading.remove wire:target="authenticate">Sign In</span>
+                <span wire:loading wire:target="authenticate" class="inline-flex items-center gap-2">
+                    <svg
+    class="animate-spin w-4 h-4"
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    aria-label="Loading"
+>
+    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+</svg>
+                    Signing in...
+                </span>
+</button>
+        </div>
+    </form>
+</div>
+        </div>
+    </div>
+
+    
+    <div class="fixed top-4 right-4">
+        <button
+            type="button"
+            @click="$store.theme.toggle()"
+            class="btn btn-ghost p-2 rounded-lg border border-border-default bg-surface-card"
+            aria-label="Toggle theme"
+        >
+            <svg x-show="!$store.theme.isDark" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+            </svg>
+            <svg x-show="$store.theme.isDark" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display: none;">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+        </button>
+    </div>
+
+    <div
+    x-data
+    class="fixed bottom-4 right-4 z-50 flex flex-col gap-2.5 pointer-events-none"
+    aria-live="polite"
+>
+    <template x-for="toast in $store.toasts.items" :key="toast.id">
+        <div
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0 translate-y-2"
+            x-transition:enter-end="opacity-100 translate-y-0"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100 translate-y-0"
+            x-transition:leave-end="opacity-0 translate-y-2"
+            class="toast pointer-events-auto"
+        >
+            
+            <div
+                class="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
+                :class="{
+                    'bg-emerald-500': toast.type === 'success',
+                    'bg-red-500': toast.type === 'error',
+                    'bg-amber-500': toast.type === 'warning',
+                    'bg-blue-500': toast.type === 'info' || !toast.type
+                }"
+            ></div>
+
+            <div class="flex-1 min-w-0">
+                <p x-show="toast.title" x-text="toast.title" class="text-sm font-semibold text-text-primary"></p>
+                <p x-show="toast.message" x-text="toast.message" class="text-xs text-text-secondary mt-0.5"></p>
+            </div>
+
+            <button
+                type="button"
+                @click="$store.toasts.remove(toast.id)"
+                class="text-text-muted hover:text-text-primary shrink-0"
+                aria-label="Close notification"
+            >
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    </template>
+</div>
+    <!-- Livewire Scripts -->
+<script src="https://learn.varvy.in/livewire-1ecbbf70/livewire.js?id=a964a3c8"   data-csrf="vhY1t6zp0a5BJCatRM9qcx7LB2sa5Hln2eaGCM2m" data-module-url="https://learn.varvy.in/livewire-1ecbbf70" data-update-uri="https://learn.varvy.in/livewire-1ecbbf70/update" data-navigate-once="true"></script>
+    </body>
+</html>
