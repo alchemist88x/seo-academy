@@ -27,4 +27,36 @@ class StudentProfileFactory extends Factory
             'active' => true,
         ];
     }
+
+    public function unassessed(): static
+    {
+        return $this->state(fn () => [
+            'proficiency' => null,
+            'level' => null,
+        ]);
+    }
+
+    public function beginner(): static
+    {
+        return $this->state(fn () => [
+            'proficiency' => StudentProfile::PROFICIENCY_BEGINNER,
+            'level' => 'Beginner',
+        ]);
+    }
+
+    public function intermediate(): static
+    {
+        return $this->state(fn () => [
+            'proficiency' => StudentProfile::PROFICIENCY_INTERMEDIATE,
+            'level' => 'Intermediate',
+        ]);
+    }
+
+    public function expert(): static
+    {
+        return $this->state(fn () => [
+            'proficiency' => StudentProfile::PROFICIENCY_EXPERT,
+            'level' => 'Expert',
+        ]);
+    }
 }

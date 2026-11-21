@@ -1,209 +1,301 @@
 <div class="space-y-6">
-    <x-page-header
-        title="My Courses"
-        :subtitle="'Your enrolled courses and learning progress in ' . $academy->name . '.'"
-    />
+    {{-- Header & Sub-Tabs Navigation --}}
+    <div class="space-y-4">
+        <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-text-primary tracking-tight">My Learning</h1>
+            <p class="text-sm text-text-secondary mt-1">
+                Access your enrolled SEO curriculum, track progress, and resume your lessons in {{ $academy->name }}.
+            </p>
+        </div>
+
+        @if ($hasAnyEnrollments)
+            {{-- Udemy-Style Sub-Tabs & Control Bar --}}
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-default pb-3">
+                {{-- Tabs --}}
+                <div class="flex items-center gap-1 sm:gap-2">
+                    <button
+                        type="button"
+                        wire:click="setTab('all')"
+                        class="px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all {{ $tab === 'all' ? 'bg-primary-600 text-white shadow-xs' : 'text-text-secondary hover:text-text-primary hover:bg-border-muted' }}"
+                    >
+                        All Courses ({{ $totalCount }})
+                    </button>
+                    <button
+                        type="button"
+                        wire:click="setTab('in_progress')"
+                        class="px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all {{ $tab === 'in_progress' ? 'bg-primary-600 text-white shadow-xs' : 'text-text-secondary hover:text-text-primary hover:bg-border-muted' }}"
+                    >
+                        In Progress ({{ $inProgressCount }})
+                    </button>
+                    <button
+                        type="button"
+                        wire:click="setTab('completed')"
+                        class="px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all {{ $tab === 'completed' ? 'bg-primary-600 text-white shadow-xs' : 'text-text-secondary hover:text-text-primary hover:bg-border-muted' }}"
+                    >
+                        Completed ({{ $completedCount }})
+                    </button>
+                </div>
+
+                {{-- Sort Dropdown --}}
+                <div class="flex items-center gap-2 shrink-0">
+                    <span class="text-xs text-text-muted hidden sm:inline">Sort by:</span>
+                    <select
+                        wire:model.live="sortBy"
+                        class="text-xs font-semibold rounded-xl border border-input-border bg-input-bg text-input-text px-3 py-1.5 focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
+                    >
+                        <option value="recent">Recently Accessed</option>
+                        <option value="title">Course Title (A-Z)</option>
+                        <option value="progress">Highest Progress</option>
+                    </select>
+                </div>
+            </div>
+        @endif
+    </div>
 
     @if (! $hasAnyEnrollments)
         <x-card>
             <x-empty-state
-                title="You are not currently enrolled in any courses"
-                message="You are not currently enrolled in any courses. Please contact your academy administrator to get enrolled."
+                title="You are not enrolled in any courses yet"
+                message="You currently do not have any active course enrollments in this academy. Please contact your academy administrator to get enrolled."
             />
         </x-card>
     @else
-        {{-- Filters --}}
-        <x-card>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
-                <div class="lg:col-span-2">
-                    <x-input
-                        name="search"
-                        label="Search Courses"
-                        wire:model.live.debounce.300ms="search"
-                        placeholder="Search by course title or description..."
-                    />
-                </div>
-
-                <x-select
-                    name="status"
-                    label="Status"
-                    wire:model.live="status"
-                    placeholder="All Statuses"
-                    :options="[
-                        'active' => 'Active',
-                        'completed' => 'Completed',
-                        'suspended' => 'Suspended',
-                        'expired' => 'Expired',
-                        'pending' => 'Pending',
-                        'cancelled' => 'Cancelled',
-                    ]"
-                />
+        {{-- Search Input Bar --}}
+        <div class="relative max-w-md">
+            <input
+                type="text"
+                wire:model.live.debounce.300ms="search"
+                placeholder="Search by course title, topic, or category..."
+                class="w-full text-xs sm:text-sm rounded-xl border border-input-border bg-input-bg text-input-text px-4 py-2 pl-10 focus:ring-2 focus:ring-primary-500 focus:outline-hidden"
+            />
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
             </div>
-
-            @if ($search !== '' || $status !== '')
-                <div class="mt-3 flex justify-end">
-                    <button
-                        type="button"
-                        wire:click="resetFilters"
-                        class="text-xs font-medium text-primary-600 hover:underline"
-                    >
-                        Clear filters
-                    </button>
-                </div>
+            @if ($search !== '')
+                <button
+                    type="button"
+                    wire:click="$set('search', '')"
+                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-xs text-text-muted hover:text-text-primary"
+                >
+                    &times; Clear
+                </button>
             @endif
-        </x-card>
+        </div>
 
         {{-- Courses Grid --}}
-        @if ($enrollments->isEmpty())
+        @if ($paginatedEnrollments->isEmpty())
             <x-card>
                 <x-empty-state
-                    title="No matching courses"
-                    message="No enrolled courses match your current search or filter criteria."
+                    title="No matching courses found"
+                    message="No courses match your current search or tab filter. Try adjusting your search query or switching tabs."
                 >
                     <x-slot:action>
-                        <x-button variant="secondary" size="sm" wire:click="resetFilters">
-                            Reset Filters
-                        </x-button>
+                        <button
+                            type="button"
+                            wire:click="resetFilters"
+                            class="btn btn-secondary btn-sm"
+                        >
+                            Reset All Filters
+                        </button>
                     </x-slot:action>
                 </x-empty-state>
             </x-card>
         @else
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                @foreach ($enrollments as $enrollment)
+                @foreach ($paginatedEnrollments as $item)
                     @php
-                        $course = $enrollment->course;
-                        $status = strtolower($enrollment->status ?? 'pending');
-                        $badgeColor = match ($status) {
-                            'active' => 'green',
-                            'completed' => 'blue',
-                            'suspended', 'pending' => 'yellow',
-                            'cancelled' => 'red',
-                            default => 'gray',
-                        };
-                        $moduleCount = $course ? $course->modules->count() : 0;
-                        $lessonCount = $course ? $course->modules->flatMap->lessons->count() : 0;
+                        $course = $item['course'];
+                        $enrollment = $item['enrollment'];
+                        $status = $item['status'];
+                        $progressPercent = $item['progress_percent'];
+                        $resumeLesson = $item['resume_lesson'];
+                        $cert = $item['certificate'];
+                        $targetUrl = $resumeLesson
+                            ? route('student.courses.learn', [$course, $resumeLesson->id])
+                            : route('student.courses.learn', $course);
                     @endphp
 
-                    <x-card wire:key="enrollment-card-{{ $enrollment->id }}" class="flex flex-col justify-between">
-                        <div class="space-y-3">
-                            @if ($course && method_exists($course, 'thumbnailUrl') && $course->thumbnailUrl())
+                    <div
+                        wire:key="learning-card-{{ $enrollment->id }}"
+                        class="rounded-2xl border border-border-default bg-surface-card flex flex-col justify-between overflow-hidden shadow-xs hover:shadow-md hover:border-primary-500/40 transition-all duration-200"
+                    >
+                        {{-- Top Thumbnail --}}
+                        <div class="relative w-full h-44 bg-slate-900 overflow-hidden group">
+                            @if ($course && $course->thumbnailUrl())
                                 <img
                                     src="{{ $course->thumbnailUrl() }}"
                                     alt="{{ $course->title }}"
-                                    class="w-full h-44 object-cover rounded-lg border border-border-default"
+                                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                 />
                             @else
-                                <div class="w-full h-44 rounded-lg bg-border-muted flex items-center justify-center text-sm font-semibold text-text-muted">
-                                    {{ $course?->category?->name ?? 'SEO Academy' }}
+                                <div class="w-full h-full bg-gradient-to-br from-indigo-800 via-indigo-900 to-slate-950 flex flex-col items-center justify-center p-4 text-center">
+                                    <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-300">
+                                        {{ $course?->category?->name ?? 'Curriculum' }}
+                                    </span>
+                                    <span class="text-sm font-bold text-white line-clamp-2 mt-1">
+                                        {{ $course?->title }}
+                                    </span>
                                 </div>
                             @endif
 
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="text-xs font-semibold text-text-muted uppercase tracking-wider">
-                                    {{ $course?->category?->name ?? 'Course' }}
-                                </span>
-                                <x-badge :color="$badgeColor">
-                                    {{ ucfirst($status) }}
-                                </x-badge>
+                            {{-- Status Badge Overlay --}}
+                            <div class="absolute top-3 right-3">
+                                @if ($status === 'active')
+                                    <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500 text-white shadow-xs">
+                                        Active
+                                    </span>
+                                @elseif ($status === 'completed')
+                                    <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-indigo-600 text-white shadow-xs">
+                                        Completed
+                                    </span>
+                                @elseif ($status === 'expired')
+                                    <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-slate-700 text-slate-200 shadow-xs">
+                                        Expired
+                                    </span>
+                                @elseif ($status === 'suspended')
+                                    <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-600 text-white shadow-xs">
+                                        Suspended
+                                    </span>
+                                @else
+                                    <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-slate-600 text-white shadow-xs capitalize">
+                                        {{ $status }}
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+
+                        {{-- Card Body --}}
+                        <div class="p-5 space-y-3 flex-1 flex flex-col justify-between">
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between text-xs text-text-muted">
+                                    <span class="font-semibold uppercase tracking-wider text-primary-600 dark:text-primary-400">
+                                        {{ $course?->category?->name ?? 'Course' }}
+                                    </span>
+                                    <span>{{ ucfirst($course?->difficulty ?? 'All Levels') }}</span>
+                                </div>
+
+                                <h3 class="font-bold text-text-primary text-base line-clamp-2">
+                                    @if ($status === 'active' || $status === 'completed')
+                                        <a href="{{ route('courses.public.show', $course->slug) }}" class="hover:text-primary-600 transition-colors">
+                                            {{ $course?->title }}
+                                        </a>
+                                    @else
+                                        <span>{{ $course?->title }}</span>
+                                    @endif
+                                </h3>
+
+                                {{-- Trainers --}}
+                                @if ($course && $course->trainers->isNotEmpty())
+                                    <p class="text-xs text-text-secondary truncate">
+                                        By {{ $course->trainers->pluck('name')->join(', ') }}
+                                    </p>
+                                @endif
+
+                                {{-- Resume Lesson / Next Lesson Preview --}}
+                                @if ($status === 'active' && $resumeLesson)
+                                    <div class="p-2.5 rounded-xl bg-border-muted/50 border border-border-default/60 text-xs">
+                                        <span class="font-semibold text-text-primary block truncate">
+                                            Next: {{ $resumeLesson->title }}
+                                        </span>
+                                    </div>
+                                @endif
                             </div>
 
-                            <h3 class="text-lg font-semibold text-text-primary line-clamp-2">
-                                @if ($status === 'active' && $course)
-                                    <a href="{{ route('courses.public.show', $course->slug) }}" class="hover:text-primary-600 transition-colors">
-                                        {{ $course->title }}
-                                    </a>
-                                @else
-                                    <span>{{ $course?->title ?? 'Course Unavailable' }}</span>
-                                @endif
-                            </h3>
-
-                            @if ($course?->description)
-                                <p class="text-sm text-text-secondary line-clamp-2">
-                                    {{ \Illuminate\Support\Str::limit($course->description, 110) }}
-                                </p>
-                            @endif
-
-                            <div class="pt-2 text-xs text-text-muted space-y-1">
-                                <div class="flex items-center justify-between">
-                                    <span>Curriculum:</span>
-                                    <span class="font-medium text-text-secondary">{{ $moduleCount }} Modules &bull; {{ $lessonCount }} Lessons</span>
-                                </div>
-                                <div class="flex items-center justify-between">
-                                    <span>Validity:</span>
-                                    <span class="font-medium text-text-secondary">
-                                        @if ($enrollment->starts_at && $enrollment->expires_at)
-                                            {{ $enrollment->starts_at->format('M d, Y') }} &ndash; {{ $enrollment->expires_at->format('M d, Y') }}
-                                        @elseif ($enrollment->expires_at)
-                                            Expires {{ $enrollment->expires_at->format('M d, Y') }}
-                                        @elseif ($enrollment->starts_at)
-                                            Started {{ $enrollment->starts_at->format('M d, Y') }}
-                                        @elseif ($enrollment->enrolled_at)
-                                            Enrolled {{ $enrollment->enrolled_at->format('M d, Y') }}
-                                        @else
-                                            Active Access
-                                        @endif
+                            {{-- Progress Bar Section --}}
+                            <div class="space-y-1.5 pt-2">
+                                <div class="flex items-center justify-between text-xs">
+                                    <span class="text-text-muted">
+                                        {{ $item['completed_lessons'] }} of {{ $item['total_lessons'] }} lessons completed
                                     </span>
+                                    <span class="font-bold text-primary-600 dark:text-primary-400">{{ $progressPercent }}%</span>
+                                </div>
+                                <div class="w-full bg-border-muted rounded-full h-2 overflow-hidden border border-border-default/60">
+                                    <div
+                                        class="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                                        style="width: {{ $progressPercent }}%"
+                                    ></div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="pt-4 mt-4 border-t border-border-default">
-                            @if ($status === 'active' && $course)
+                        {{-- Card Bottom Action Bar --}}
+                        <div class="p-4 pt-3 border-t border-border-default bg-surface-card/60 flex flex-col gap-2.5">
+                            @if ($status === 'active')
                                 <a
                                     href="{{ route('student.courses.learn', $course) }}"
-                                    class="btn btn-primary btn-sm w-full text-center"
+                                    class="btn btn-primary btn-sm w-full text-center inline-flex items-center justify-center gap-2 font-bold shadow-xs"
                                 >
-                                    Resume Course
+                                    <svg class="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    <span>Resume Course</span>
                                 </a>
-                            @elseif ($status === 'completed' && $course)
+                            @elseif ($status === 'completed')
                                 <div class="space-y-2">
                                     <a
                                         href="{{ route('student.courses.learn', $course) }}"
-                                        class="btn btn-secondary btn-sm w-full text-center"
+                                        class="btn btn-secondary btn-sm w-full text-center font-bold"
                                     >
                                         Review Course
                                     </a>
-                                    @php
-                                        $cert = \App\Domain\Certificates\Models\Certificate::where('enrollment_id', $enrollment->id)->orWhere(function($q) use ($enrollment) {
-                                            $q->where('user_id', $enrollment->studentProfile?->user_id)->where('course_id', $enrollment->course_id);
-                                        })->where('status', 'Issued')->first();
-                                    @endphp
                                     @if ($cert)
                                         <div class="flex gap-2">
-                                            <a href="{{ route('certificates.download', $cert) }}" class="btn btn-primary btn-xs flex-1 text-center">
-                                                Download Certificate
+                                            <a
+                                                href="{{ route('certificates.download', $cert) }}"
+                                                class="btn btn-primary btn-xs flex-1 text-center font-bold"
+                                            >
+                                                Certificate
                                             </a>
-                                            <a href="{{ route('certificates.verify', $cert->verification_code ?: $cert->certificate_number) }}" target="_blank" class="btn btn-secondary btn-xs flex-1 text-center">
+                                            <a
+                                                href="{{ route('certificates.verify', $cert->verification_code ?: $cert->certificate_number) }}"
+                                                target="_blank"
+                                                class="btn btn-secondary btn-xs flex-1 text-center"
+                                            >
                                                 Verify
                                             </a>
                                         </div>
                                     @endif
                                 </div>
                             @elseif ($status === 'suspended')
-                                <div class="w-full text-center py-2 px-3 rounded-md text-xs font-medium bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                                    Access Suspended
+                                <div class="w-full text-center py-2 px-3 rounded-xl text-xs font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                                    Enrollment Suspended
                                 </div>
                             @elseif ($status === 'expired')
-                                <div class="w-full text-center py-2 px-3 rounded-md text-xs font-medium bg-slate-500/10 text-slate-400 border border-slate-500/20">
+                                <div class="w-full text-center py-2 px-3 rounded-xl text-xs font-semibold bg-slate-500/10 text-slate-500 border border-slate-500/20">
                                     Enrollment Expired
                                 </div>
-                            @elseif ($status === 'cancelled')
-                                <div class="w-full text-center py-2 px-3 rounded-md text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                                    Enrollment Cancelled
-                                </div>
                             @else
-                                <div class="w-full text-center py-2 px-3 rounded-md text-xs font-medium bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
-                                    Enrollment Pending
+                                <div class="w-full text-center py-2 px-3 rounded-xl text-xs font-semibold bg-yellow-500/10 text-yellow-600 border border-yellow-500/20">
+                                    Pending Enrollment
                                 </div>
                             @endif
+
+                            <div class="text-[11px] text-text-muted flex items-center justify-between">
+                                <span>
+                                    @if ($enrollment->expires_at)
+                                        Expires {{ $enrollment->expires_at->format('M d, Y') }}
+                                    @else
+                                        Lifetime Access
+                                    @endif
+                                </span>
+                                <a
+                                    href="{{ route('courses.public.show', $course->slug) }}"
+                                    class="text-primary-600 dark:text-primary-400 hover:underline font-semibold"
+                                >
+                                    Course Details &rarr;
+                                </a>
+                            </div>
                         </div>
-                    </x-card>
+                    </div>
                 @endforeach
             </div>
 
-            @if ($enrollments->hasPages())
-                <div class="pt-2">
-                    {{ $enrollments->links() }}
+            {{-- Pagination Links --}}
+            @if ($paginatedEnrollments->hasPages())
+                <div class="pt-4">
+                    {{ $paginatedEnrollments->links() }}
                 </div>
             @endif
         @endif

@@ -79,13 +79,34 @@ class AcademySettingsService
             'logo' => $logo,
             'favicon' => $favicon,
         ], [
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'tagline' => ['nullable', 'string', 'max:255'],
             'primary_color' => ['sometimes', 'required', 'string', 'max:20', 'regex:/^#[0-9A-Fa-f]{3,8}$/'],
             'secondary_color' => ['sometimes', 'required', 'string', 'max:20', 'regex:/^#[0-9A-Fa-f]{3,8}$/'],
             'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'favicon' => ['nullable', 'file', 'mimes:png,ico,webp,jpg,jpeg', 'max:512'],
         ])->validate();
 
-        $attributes = Arr::only($validated, ['primary_color', 'secondary_color']);
+        $attributes = Arr::only($validated, ['name', 'primary_color', 'secondary_color']);
+
+        if (array_key_exists('tagline', $validated)) {
+            $settings = $academy->settings ?? [];
+            $settings['tagline'] = $validated['tagline'] !== null ? trim($validated['tagline']) : '';
+            $attributes['settings'] = $settings;
+
+            Setting::updateOrCreate(
+                [
+                    'academy_id' => $academy->id,
+                    'group' => 'branding',
+                    'key' => 'tagline',
+                ],
+                [
+                    'value' => $settings['tagline'],
+                    'type' => 'string',
+                    'is_public' => true,
+                ]
+            );
+        }
         $directory = "academies/{$academy->id}/branding";
 
         if ($logo !== null) {

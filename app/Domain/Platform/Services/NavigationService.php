@@ -127,6 +127,13 @@ class NavigationService
                     'active' => request()->routeIs('admin.assignments.*'),
                 ],
                 [
+                    'label' => 'Practical Projects',
+                    'route' => 'admin.projects.index',
+                    'url' => route('admin.projects.index'),
+                    'icon' => 'briefcase',
+                    'active' => request()->routeIs('admin.projects.*'),
+                ],
+                [
                     'label' => 'Question Banks',
                     'route' => 'admin.question-banks.index',
                     'url' => route('admin.question-banks.index'),
@@ -142,6 +149,23 @@ class NavigationService
                 ],
             ];
 
+            $communicationItems = [
+                [
+                    'label' => 'Chat Conversations',
+                    'route' => 'admin.chat-conversations',
+                    'url' => route('admin.chat-conversations'),
+                    'icon' => 'message-square',
+                    'active' => request()->routeIs('admin.chat-conversations*'),
+                ],
+                [
+                    'label' => 'Contact Inquiries',
+                    'route' => 'admin.contact-inquiries.index',
+                    'url' => route('admin.contact-inquiries.index'),
+                    'icon' => 'mail',
+                    'active' => request()->routeIs('admin.contact-inquiries*'),
+                ],
+            ];
+
             $systemItems = [
                 [
                     'label' => 'Support Desk',
@@ -151,11 +175,25 @@ class NavigationService
                     'active' => request()->routeIs('support.*'),
                 ],
                 [
+                    'label' => 'Website & CMS',
+                    'route' => 'admin.website.index',
+                    'url' => route('admin.website.index'),
+                    'icon' => 'globe',
+                    'active' => request()->routeIs('admin.website.*'),
+                ],
+                [
                     'label' => 'Academy Settings',
                     'route' => 'admin.academy.settings',
                     'url' => route('admin.academy.settings'),
                     'icon' => 'settings',
                     'active' => request()->routeIs('admin.academy.settings'),
+                ],
+                [
+                    'label' => 'Proficiency Levels',
+                    'route' => 'admin.settings.proficiency-levels',
+                    'url' => route('admin.settings.proficiency-levels'),
+                    'icon' => 'award',
+                    'active' => request()->routeIs('admin.settings.proficiency-levels*'),
                 ],
                 [
                     'label' => 'File Management',
@@ -195,6 +233,11 @@ class NavigationService
             ];
 
             $groups[] = [
+                'title' => 'Communication',
+                'items' => $communicationItems,
+            ];
+
+            $groups[] = [
                 'title' => 'People & Access',
                 'items' => $academyItems,
             ];
@@ -202,6 +245,71 @@ class NavigationService
             $groups[] = [
                 'title' => 'Curriculum & Records',
                 'items' => $curriculumItems,
+            ];
+
+            $commerceItems = [
+                [
+                    'label' => 'Orders & Payments',
+                    'route' => 'admin.orders.index',
+                    'url' => route('admin.orders.index'),
+                    'icon' => 'credit-card',
+                    'active' => request()->routeIs('admin.orders.*'),
+                ],
+                [
+                    'label' => 'Course Bundles',
+                    'route' => 'admin.bundles.index',
+                    'url' => route('admin.bundles.index'),
+                    'icon' => 'layers',
+                    'active' => request()->routeIs('admin.bundles.*'),
+                ],
+                [
+                    'label' => 'Discount Coupons',
+                    'route' => 'admin.coupons.index',
+                    'url' => route('admin.coupons.index'),
+                    'icon' => 'tag',
+                    'active' => request()->routeIs('admin.coupons.*'),
+                ],
+                [
+                    'label' => 'Commerce Reports',
+                    'route' => 'admin.reports.commerce',
+                    'url' => route('admin.reports.commerce'),
+                    'icon' => 'bar-chart-2',
+                    'active' => request()->routeIs('admin.reports.commerce'),
+                ],
+                [
+                    'label' => 'Payment Gateway',
+                    'route' => 'admin.payment.settings',
+                    'url' => route('admin.payment.settings'),
+                    'icon' => 'credit-card',
+                    'active' => request()->routeIs('admin.payment.settings*'),
+                ],
+            ];
+
+            $groups[] = [
+                'title' => 'Commerce & Enrollment',
+                'items' => $commerceItems,
+            ];
+
+            $analyticsItems = [
+                [
+                    'label' => 'Learning Analytics',
+                    'route' => 'admin.analytics.index',
+                    'url' => route('admin.analytics.index'),
+                    'icon' => 'activity',
+                    'active' => request()->routeIs('admin.analytics.*'),
+                ],
+                [
+                    'label' => 'Reports & Exports',
+                    'route' => 'admin.reports.index',
+                    'url' => route('admin.reports.index'),
+                    'icon' => 'clipboard-check',
+                    'active' => request()->routeIs('admin.reports.*'),
+                ],
+            ];
+
+            $groups[] = [
+                'title' => 'Analytics & Reports',
+                'items' => $analyticsItems,
             ];
 
             $groups[] = [
@@ -242,11 +350,32 @@ class NavigationService
                     'active' => request()->routeIs('trainer.assignments.*'),
                 ],
                 [
+                    'label' => 'Project Evaluations',
+                    'route' => 'trainer.projects.index',
+                    'url' => route('trainer.projects.index'),
+                    'icon' => 'briefcase',
+                    'active' => request()->routeIs('trainer.projects.*'),
+                ],
+                [
                     'label' => 'Question Banks',
                     'route' => 'trainer.question-banks.index',
                     'url' => route('trainer.question-banks.index'),
                     'icon' => 'database',
                     'active' => request()->routeIs('trainer.question-banks.*'),
+                ],
+                [
+                    'label' => 'Performance & Analytics',
+                    'route' => 'trainer.analytics.index',
+                    'url' => route('trainer.analytics.index'),
+                    'icon' => 'activity',
+                    'active' => request()->routeIs('trainer.analytics.*'),
+                ],
+                [
+                    'label' => 'Teaching Reports',
+                    'route' => 'trainer.reports.index',
+                    'url' => route('trainer.reports.index'),
+                    'icon' => 'clipboard-check',
+                    'active' => request()->routeIs('trainer.reports.*'),
                 ],
             ];
 
@@ -260,6 +389,20 @@ class NavigationService
         if ($isSupportStaff && ! $isAdmin) {
             $supportItems = [
                 [
+                    'label' => 'Chat Conversations',
+                    'route' => 'admin.chat-conversations',
+                    'url' => route('admin.chat-conversations'),
+                    'icon' => 'message-square',
+                    'active' => request()->routeIs('admin.chat-conversations*'),
+                ],
+                [
+                    'label' => 'Contact Inquiries',
+                    'route' => 'admin.contact-inquiries.index',
+                    'url' => route('admin.contact-inquiries.index'),
+                    'icon' => 'mail',
+                    'active' => request()->routeIs('admin.contact-inquiries*'),
+                ],
+                [
                     'label' => 'Support Tickets',
                     'route' => 'support.tickets.index',
                     'url' => route('support.tickets.index'),
@@ -269,7 +412,7 @@ class NavigationService
             ];
 
             $groups[] = [
-                'title' => 'Support Desk',
+                'title' => 'Communication',
                 'items' => $supportItems,
             ];
         }
@@ -292,11 +435,39 @@ class NavigationService
                     'active' => request()->routeIs('student.assignments.*'),
                 ],
                 [
+                    'label' => 'My Projects',
+                    'route' => 'student.projects.index',
+                    'url' => route('student.projects.index'),
+                    'icon' => 'briefcase',
+                    'active' => request()->routeIs('student.projects.*'),
+                ],
+                [
+                    'label' => 'My Portfolio',
+                    'route' => 'student.portfolio.index',
+                    'url' => route('student.portfolio.index'),
+                    'icon' => 'folder-git-2',
+                    'active' => request()->routeIs('student.portfolio.*'),
+                ],
+                [
                     'label' => 'My Certificates',
                     'route' => 'student.certificates.index',
                     'url' => route('student.certificates.index'),
                     'icon' => 'award',
                     'active' => request()->routeIs('student.certificates.*'),
+                ],
+                [
+                    'label' => 'My Orders & Payments',
+                    'route' => 'student.orders.index',
+                    'url' => route('student.orders.index'),
+                    'icon' => 'credit-card',
+                    'active' => request()->routeIs('student.orders.*'),
+                ],
+                [
+                    'label' => 'My Analytics',
+                    'route' => 'student.analytics',
+                    'url' => route('student.analytics'),
+                    'icon' => 'activity',
+                    'active' => request()->routeIs('student.analytics'),
                 ],
             ];
 

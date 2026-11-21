@@ -3,6 +3,8 @@
 namespace App\Domain\Courses\Models;
 
 use App\Domain\Certificates\Models\Certificate;
+use App\Domain\Commerce\Models\CommerceInstallmentPlan;
+use App\Domain\Commerce\Models\CourseBundle;
 use App\Domain\Grading\Models\CourseGradingScheme;
 use App\Domain\Lessons\Models\Lesson;
 use App\Domain\Quizzes\Models\Quiz;
@@ -49,6 +51,20 @@ class Course extends Model
         'is_sequential',
         'status',
         'published_at',
+        'is_marketing_featured',
+        'marketing_description',
+        'marketing_highlights',
+        'seo_title',
+        'seo_description',
+        'canonical_url',
+        'is_public_listed',
+        'discount_price',
+        'discount_percentage',
+        'discount_starts_at',
+        'discount_expires_at',
+        'regional_prices',
+        'is_coupon_eligible',
+        'installment_plan_id',
     ];
 
     protected function casts(): array
@@ -60,6 +76,15 @@ class Course extends Model
             'is_free' => 'boolean',
             'enrollment_limit' => 'integer',
             'published_at' => 'datetime',
+            'is_marketing_featured' => 'boolean',
+            'marketing_highlights' => 'array',
+            'is_public_listed' => 'boolean',
+            'discount_price' => 'decimal:2',
+            'discount_percentage' => 'decimal:2',
+            'discount_starts_at' => 'datetime',
+            'discount_expires_at' => 'datetime',
+            'regional_prices' => 'array',
+            'is_coupon_eligible' => 'boolean',
         ];
     }
 
@@ -182,5 +207,43 @@ class Course extends Model
         return $query->whereHas('trainers', function (Builder $q) use ($trainer): void {
             $q->where('users.id', $trainer->getKey());
         });
+    }
+
+    public function bundles(): BelongsToMany
+    {
+        return $this->belongsToMany(CourseBundle::class, 'course_bundle_courses', 'course_id', 'bundle_id')
+            ->withPivot('display_order')
+            ->withTimestamps();
+    }
+
+    public function installmentPlan(): BelongsTo
+    {
+        return $this->belongsTo(CommerceInstallmentPlan::class, 'installment_plan_id');
+    }
+
+    public function getEffectivePriceAttribute(): float
+    {
+        if ($this->is_free) {
+            return 0.00;
+        }
+
+        $now = now();
+        if ($this->discount_price !== null && $this->discount_price > 0) {
+            if (($this->discount_starts_at === null || $this->discount_starts_at <= $now) &&
+                ($this->discount_expires_at === null || $this->discount_expires_at >= $now)) {
+                return (float) $this->discount_price;
+            }
+        }
+
+        if ($this->discount_percentage !== null && $this->discount_percentage > 0) {
+            if (($this->discount_starts_at === null || $this->discount_starts_at <= $now) &&
+                ($this->discount_expires_at === null || $this->discount_expires_at >= $now)) {
+                $discount = ($this->price * $this->discount_percentage) / 100;
+
+                return max(0.00, round((float) ($this->price - $discount), 2));
+            }
+        }
+
+        return (float) ($this->price ?? 0.00);
     }
 }

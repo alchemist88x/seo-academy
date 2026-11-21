@@ -14,6 +14,7 @@
     $user = auth()->user();
     $activeAcademy = app(\App\Domain\Tenants\Services\TenantContext::class)->getAcademy();
     $brandName = $activeAcademy?->name ?: config('app.name', 'SEO Academy');
+    $tagline = $activeAcademy?->setting('tagline', 'Digital Marketing') ?: 'Digital Marketing';
     $navigationGroups = app(\App\Domain\Platform\Services\NavigationService::class)->getNavigationForUser($user);
 @endphp
 
@@ -28,27 +29,45 @@
     @keydown.escape.window="if ($store?.sidebar?.mobileOpen) $store.sidebar.closeMobile()"
 >
     {{-- Brand Header --}}
-    <div class="h-16 flex items-center justify-between px-4 border-b border-slate-800 shrink-0">
-        <a href="{{ url('/') }}" class="flex items-center gap-3 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-md">
-            <div class="h-9 w-9 rounded-lg bg-primary-600 flex items-center justify-center text-white font-bold shrink-0 shadow-sm">
+    <div
+        class="h-16 flex items-center border-b border-slate-800 shrink-0 transition-all duration-200"
+        :class="$store?.sidebar?.collapsed && !$store?.sidebar?.mobileOpen ? 'flex-col justify-center py-1.5 px-1 gap-1' : 'justify-between px-4'"
+    >
+        <a
+            href="{{ url('/') }}"
+            class="flex items-center gap-2.5 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-md min-w-0"
+            :class="$store?.sidebar?.collapsed && !$store?.sidebar?.mobileOpen ? 'justify-center' : ''"
+        >
+            <div
+                class="rounded-lg bg-primary-600 flex items-center justify-center text-white font-bold shrink-0 shadow-sm transition-all duration-200"
+                :class="$store?.sidebar?.collapsed && !$store?.sidebar?.mobileOpen ? 'h-7 w-7 text-xs' : 'h-9 w-9 text-sm'"
+            >
                 {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($brandName, 0, 1)) }}
             </div>
-            <span
+            <div
                 x-show="!$store?.sidebar?.collapsed || $store?.sidebar?.mobileOpen"
                 x-transition:enter="transition ease-out duration-150"
                 x-transition:enter-start="opacity-0"
                 x-transition:enter-end="opacity-100"
-                class="text-base font-bold text-white tracking-tight whitespace-nowrap truncate"
+                class="min-w-0 flex flex-col"
             >
-                {{ $brandName }}
-            </span>
+                <span class="text-sm font-bold text-white tracking-tight leading-tight truncate">
+                    {{ $brandName }}
+                </span>
+                @if ($tagline)
+                    <span class="text-[10px] font-medium text-slate-400 tracking-normal leading-tight truncate">
+                        {{ $tagline }}
+                    </span>
+                @endif
+            </div>
         </a>
 
         {{-- Desktop Collapse Toggle --}}
         <button
             type="button"
             @click="$store?.sidebar?.toggleCollapse ? $store.sidebar.toggleCollapse() : null"
-            class="hidden md:flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            class="hidden md:flex items-center justify-center rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 cursor-pointer"
+            :class="$store?.sidebar?.collapsed && !$store?.sidebar?.mobileOpen ? 'w-6 h-6' : 'w-7 h-7'"
             :title="$store?.sidebar?.collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
             :aria-expanded="!$store?.sidebar?.collapsed"
             aria-controls="main-sidebar"

@@ -21,6 +21,7 @@
                     'profile' => 'Profile & Contact',
                     'branding' => 'Branding & Logo',
                     'domain' => 'Domain Configuration',
+                    'currency' => 'Currency & Regional Pricing',
                     'settings' => 'General Settings',
                 ];
             @endphp
@@ -254,7 +255,122 @@
         </form>
     @endif
 
-    {{-- Tab 4: General Settings --}}
+    {{-- Tab 4: Currency & Regional Pricing --}}
+    @if ($activeTab === 'currency')
+        <form wire:submit="saveCurrencySettings">
+            <x-card title="Currency & Regional Pricing" description="Configure the global default currency, exchange conversions, and regional pricing behavior.">
+                <div class="space-y-6">
+                    <div class="bg-primary-50 dark:bg-primary-950/30 border border-primary-200 dark:border-primary-800 rounded-lg p-4 text-sm text-text-primary">
+                        <div class="flex items-start gap-3">
+                            <x-icon name="information-circle" class="w-5 h-5 text-primary-600 mt-0.5 shrink-0" />
+                            <div>
+                                <span class="font-semibold text-text-primary">Global Pricing Rule:</span>
+                                All courses, bundles, checkout summaries, and reports will respect this default currency unless regional pricing or visitor currency selection is active. Existing transaction records, invoices, and historical orders preserve their original transaction currency.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="default_currency" class="form-label font-medium text-text-primary mb-1">
+                                Default Academy Currency <span class="text-rose-500">*</span>
+                            </label>
+                            <select
+                                id="default_currency"
+                                wire:model="default_currency"
+                                class="form-input w-full"
+                            >
+                                <option value="INR">INR — Indian Rupee (₹)</option>
+                                <option value="USD">USD — US Dollar ($)</option>
+                                <option value="AED">AED — UAE Dirham (AED)</option>
+                                <option value="EUR">EUR — Euro (€)</option>
+                                <option value="GBP">GBP — British Pound (£)</option>
+                                <option value="AUD">AUD — Australian Dollar (A$)</option>
+                                <option value="CAD">CAD — Canadian Dollar (C$)</option>
+                                <option value="SGD">SGD — Singapore Dollar (S$)</option>
+                                <option value="SAR">SAR — Saudi Riyal (SAR)</option>
+                            </select>
+                            <p class="text-xs text-text-muted mt-1">
+                                Used as the primary base currency throughout the entire academy for new courses, bundles, and public pricing.
+                            </p>
+                            @error('default_currency')
+                                <p class="form-error mt-1 text-sm text-rose-500">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div class="space-y-4">
+                            <label class="form-label font-medium text-text-primary">Regional & Visitor Options</label>
+
+                            <div class="flex items-start gap-3 p-3 bg-surface-alt rounded-lg border border-border-default">
+                                <input
+                                    type="checkbox"
+                                    id="enable_regional_pricing"
+                                    wire:model="enable_regional_pricing"
+                                    class="mt-1 h-4 w-4 rounded border-border-default text-primary-600 focus:ring-primary-500"
+                                />
+                                <div>
+                                    <label for="enable_regional_pricing" class="font-medium text-sm text-text-primary cursor-pointer">
+                                        Enable Regional Currency Detection
+                                    </label>
+                                    <p class="text-xs text-text-muted">
+                                        Automatically presents prices in the visitor's local currency based on GeoIP / Cloudflare country headers if regional pricing is defined.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-start gap-3 p-3 bg-surface-alt rounded-lg border border-border-default">
+                                <input
+                                    type="checkbox"
+                                    id="enable_currency_switcher"
+                                    wire:model="enable_currency_switcher"
+                                    class="mt-1 h-4 w-4 rounded border-border-default text-primary-600 focus:ring-primary-500"
+                                />
+                                <div>
+                                    <label for="enable_currency_switcher" class="font-medium text-sm text-text-primary cursor-pointer">
+                                        Enable Visitor Currency Switcher
+                                    </label>
+                                    <p class="text-xs text-text-muted">
+                                        Permit visitors and students to manually select their preferred currency from public pages and checkout.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label font-medium text-text-primary mb-2">Enabled Currencies</label>
+                        <p class="text-xs text-text-muted mb-3">Select which currencies can be used for pricing and checkout.</p>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                            @foreach (\App\Domain\Commerce\Services\CurrencyAndPricingService::SUPPORTED_CURRENCIES as $code => $curr)
+                                <label class="flex items-center gap-2 p-2.5 rounded border border-border-default bg-surface hover:bg-surface-alt cursor-pointer text-sm">
+                                    <input
+                                        type="checkbox"
+                                        value="{{ $code }}"
+                                        wire:model="enabled_currencies"
+                                        class="h-4 w-4 rounded border-border-default text-primary-600 focus:ring-primary-500"
+                                    />
+                                    <span class="font-medium text-text-primary">{{ $code }}</span>
+                                    <span class="text-text-muted text-xs">({{ $curr['symbol'] }})</span>
+                                </label>
+                            @endforeach
+                        </div>
+                        @error('enabled_currencies')
+                            <p class="form-error mt-1 text-sm text-rose-500">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
+
+                <x-slot:footer>
+                    <x-button type="submit" variant="primary" wire:loading.attr="disabled">
+                        <span wire:loading.remove wire:target="saveCurrencySettings">Save Currency Settings</span>
+                        <span wire:loading wire:target="saveCurrencySettings">Saving...</span>
+                    </x-button>
+                </x-slot:footer>
+            </x-card>
+        </form>
+    @endif
+
+    {{-- Tab 5: General Settings --}}
     @if ($activeTab === 'settings')
         <form wire:submit="saveSettings">
             <x-card title="General Settings" description="Control registration, enrollment defaults, certificates, and email sender.">

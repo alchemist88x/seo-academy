@@ -28,6 +28,12 @@ function initAlpineStores() {
         },
 
         apply() {
+            if (document.documentElement.getAttribute('data-theme-locked') === 'light' || document.documentElement.dataset.themeLocked === 'light') {
+                document.documentElement.classList.remove('dark');
+                document.documentElement.classList.add('light');
+                return;
+            }
+
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
             const shouldBeDark = this.mode === 'dark' || (this.mode === 'system' && prefersDark);
 

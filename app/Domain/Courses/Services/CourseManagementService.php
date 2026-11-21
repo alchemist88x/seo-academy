@@ -3,6 +3,7 @@
 namespace App\Domain\Courses\Services;
 
 use App\Domain\Academies\Models\Academy;
+use App\Domain\Commerce\Services\CurrencyAndPricingService;
 use App\Domain\Courses\Models\Course;
 use App\Domain\Courses\Models\CourseCategory;
 use App\Domain\Platform\Concerns\RecordsAuditLog;
@@ -49,6 +50,7 @@ class CourseManagementService
         $query = Course::query()
             ->published()
             ->where('visibility', 'public')
+            ->where('is_public_listed', true)
             ->with(['category', 'trainers', 'academy']);
 
         if ($academy !== null) {
@@ -135,7 +137,7 @@ class CourseManagementService
                 'description' => $validated['description'] ?? null,
                 'difficulty' => $validated['difficulty'] ?? 'Beginner',
                 'price' => $price,
-                'currency' => strtoupper((string) ($validated['currency'] ?? 'USD')),
+                'currency' => strtoupper((string) ($validated['currency'] ?? app(CurrencyAndPricingService::class)->getAcademyCurrency($academy))),
                 'is_free' => $isFree,
                 'visibility' => $validated['visibility'] ?? 'public',
                 'enrollment_limit' => $validated['enrollment_limit'] ?? null,
@@ -228,7 +230,7 @@ class CourseManagementService
             }
 
             if (array_key_exists('currency', $validated)) {
-                $updates['currency'] = strtoupper((string) ($validated['currency'] ?? 'USD'));
+                $updates['currency'] = strtoupper((string) ($validated['currency'] ?? app(CurrencyAndPricingService::class)->getAcademyCurrency($course->academy)));
             }
             if (array_key_exists('duration_months', $validated)) {
                 $updates['duration_months'] = (int) ($validated['duration_months'] ?? 0);

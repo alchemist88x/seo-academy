@@ -16,12 +16,14 @@ class AiFaq extends Model
         'question',
         'answer',
         'category',
+        'display_order',
         'is_active',
     ];
 
     protected function casts(): array
     {
         return [
+            'display_order' => 'integer',
             'is_active' => 'boolean',
         ];
     }

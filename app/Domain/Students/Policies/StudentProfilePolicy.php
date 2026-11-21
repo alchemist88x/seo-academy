@@ -77,6 +77,41 @@ class StudentProfilePolicy
     }
 
     /**
+     * Determine whether the user can update a student's proficiency level.
+     * - Admin: full update access.
+     * - Trainer: can update proficiency ONLY IF the student is enrolled in a course assigned to this trainer,
+     *   AND explicitly permitted by the authorization model (permission 'update_student_proficiency' or academy setting).
+     * - Trainers must NOT modify students outside their assigned courses.
+     */
+    public function updateProficiency(User $user, StudentProfile $studentProfile): bool
+    {
+        if (! $user->is_active || $studentProfile->academy_id === null) {
+            return false;
+        }
+
+        if ($user->hasRole('admin')) {
+            return true;
+        }
+
+        if ($user->hasRole('trainer')) {
+            $isAssignedTrainer = $studentProfile->enrollments()
+                ->whereHas('course.trainers', function (Builder $q) use ($user): void {
+                    $q->where('users.id', $user->getKey());
+                })
+                ->exists();
+
+            if (! $isAssignedTrainer) {
+                return false;
+            }
+
+            return $user->can('update_student_proficiency')
+                || (bool) ($studentProfile->academy?->setting('trainers_can_manage_proficiency', false));
+        }
+
+        return false;
+    }
+
+    /**
      * Determine whether the user can delete a student profile.
      */
     public function delete(User $user, StudentProfile $studentProfile): bool

@@ -23,6 +23,12 @@ class AuthorizationTest extends TestCase
     {
         parent::setUp();
         $this->seed(RoleSeeder::class);
+
+        Academy::create([
+            'name' => 'SEO Academy',
+            'slug' => 'seo-academy',
+            'is_active' => true,
+        ]);
     }
 
     public function test_admin_can_access_admin_dashboard(): void
@@ -152,6 +158,7 @@ class AuthorizationTest extends TestCase
 
     public function test_database_seeder_seeds_only_four_roles_and_no_demo_records(): void
     {
+        Academy::query()->delete();
         $this->seed(DatabaseSeeder::class);
 
         $roles = Role::query()->pluck('name')->sort()->values()->all();
@@ -194,14 +201,13 @@ class AuthorizationTest extends TestCase
         }
     }
 
-    public function test_legacy_multi_tenant_roles_and_register_route_do_not_exist(): void
+    public function test_legacy_multi_tenant_roles_do_not_exist_and_register_route_exists(): void
     {
         $this->assertFalse(Role::where('name', 'platform_admin')->exists());
         $this->assertFalse(Role::where('name', 'academy_admin')->exists());
-        $this->assertFalse(Route::has('register'));
-        $this->assertFalse(Route::has('register.attempt'));
+        $this->assertTrue(Route::has('register'));
+        $this->assertTrue(Route::has('register.attempt'));
 
-        $this->get('/register')->assertNotFound();
-        $this->post('/register', [])->assertNotFound();
+        $this->get('/register')->assertOk();
     }
 }

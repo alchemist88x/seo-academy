@@ -5,6 +5,7 @@ namespace App\Domain\Certificates\Services;
 use App\Domain\Certificates\Jobs\GenerateCertificatePdfJob;
 use App\Domain\Certificates\Models\Certificate;
 use App\Domain\Certificates\Models\CertificateAuditEvent;
+use App\Domain\Certificates\Models\CertificateTemplate;
 use App\Domain\Grading\Services\GradebookCalculationService;
 use App\Domain\Notifications\Services\NotificationDispatcherService;
 use App\Domain\Platform\Models\Setting;
@@ -113,6 +114,27 @@ class CertificateIssuanceService
                     ->where('key', 'signatory_title')
                     ->value('value') ?: 'Lead Instructor & Director';
 
+                // Resolve designer template if available
+                $templateModel = null;
+                $templateService = app(CertificateTemplateService::class);
+                if (is_numeric($template) || Str::isUuid($template)) {
+                    $templateModel = CertificateTemplate::find($template);
+                } elseif ($template && ! in_array($template, ['classic', 'modern', 'minimalist'])) {
+                    $templateModel = CertificateTemplate::where('slug', $template)->orWhere('name', $template)->first();
+                }
+
+                if (! $templateModel && $academy) {
+                    $templateModel = $templateService->getDefaultTemplate($academy);
+                }
+
+                $templateDesign = null;
+                $templateVersionId = null;
+                if ($templateModel) {
+                    $currentVersion = $templateModel->currentVersion ?? $templateModel->versions()->where('status', 'published')->latest('version_number')->first();
+                    $templateDesign = $currentVersion?->design_data ?? $templateModel->design_data;
+                    $templateVersionId = $currentVersion?->id;
+                }
+
                 $issuanceSnapshot = [
                     'student' => [
                         'id' => $userId,
@@ -140,6 +162,9 @@ class CertificateIssuanceService
                         'signatory_name' => $signatoryName,
                         'signatory_title' => $signatoryTitle,
                     ],
+                    'template_design' => $templateDesign,
+                    'certificate_template_id' => $templateModel?->id,
+                    'certificate_template_version_id' => $templateVersionId,
                     'issued_at' => Carbon::now()->toDateString(),
                 ];
 
@@ -149,6 +174,8 @@ class CertificateIssuanceService
                     'course_id' => $courseId,
                     'enrollment_id' => $enrollment->id,
                     'original_enrollment_id' => $enrollment->id,
+                    'certificate_template_id' => $templateModel?->id,
+                    'certificate_template_version_id' => $templateVersionId,
                     'issued_at' => Carbon::now()->toDateString(),
                     'certificate_number' => $certificateNumber,
                     'verification_code' => $verificationCode,
@@ -574,6 +601,31 @@ class CertificateIssuanceService
                 ->where('key', 'signatory_title')
                 ->value('value') ?: 'Lead Instructor & Director';
 
+            // Resolve designer template if available
+            $templateModel = null;
+            $templateService = app(CertificateTemplateService::class);
+            if (is_numeric($template) || Str::isUuid($template)) {
+                $templateModel = CertificateTemplate::find($template);
+            } elseif ($template && ! in_array($template, ['classic', 'modern', 'minimalist'])) {
+                $templateModel = CertificateTemplate::where('slug', $template)->orWhere('name', $template)->first();
+            }
+
+            if (! $templateModel && $oldCertificate->certificate_template_id) {
+                $templateModel = $oldCertificate->certificateTemplate;
+            }
+
+            if (! $templateModel && $academy) {
+                $templateModel = $templateService->getDefaultTemplate($academy);
+            }
+
+            $templateDesign = null;
+            $templateVersionId = null;
+            if ($templateModel) {
+                $currentVersion = $templateModel->currentVersion ?? $templateModel->versions()->where('status', 'published')->latest('version_number')->first();
+                $templateDesign = $currentVersion?->design_data ?? $templateModel->design_data;
+                $templateVersionId = $currentVersion?->id;
+            }
+
             $issuanceSnapshot = [
                 'student' => [
                     'id' => $oldCertificate->user_id,
@@ -601,6 +653,9 @@ class CertificateIssuanceService
                     'signatory_name' => $signatoryName,
                     'signatory_title' => $signatoryTitle,
                 ],
+                'template_design' => $templateDesign,
+                'certificate_template_id' => $templateModel?->id,
+                'certificate_template_version_id' => $templateVersionId,
                 'issued_at' => Carbon::now()->toDateString(),
             ];
 
@@ -611,6 +666,8 @@ class CertificateIssuanceService
                 'course_id' => $oldCertificate->course_id,
                 'enrollment_id' => $enrollment->id,
                 'original_enrollment_id' => $enrollment->id,
+                'certificate_template_id' => $templateModel?->id,
+                'certificate_template_version_id' => $templateVersionId,
                 'issued_at' => Carbon::now()->toDateString(),
                 'certificate_number' => $newCertNumber,
                 'verification_code' => $newVerificationCode,

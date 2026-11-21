@@ -47,7 +47,7 @@
     x-on:keydown.escape.window="open = false"
     x-show="open"
     x-transition.opacity
-    class="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm"
+    class="modal-backdrop fixed inset-0 z-50 flex justify-center overflow-y-auto p-2 sm:p-4 bg-black/60 backdrop-blur-sm"
     style="display: none;"
     role="dialog"
     aria-modal="true"
@@ -61,7 +61,7 @@
         x-transition:leave="transition ease-in duration-150"
         x-transition:leave-start="opacity-100 scale-100"
         x-transition:leave-end="opacity-0 scale-95"
-        class="modal-panel {{ $widthClass }} border border-border-default flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-hidden"
+        class="modal-panel {{ $widthClass }} m-auto border border-border-default flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] overflow-hidden"
     >
         @if ($title || isset($header))
             <div class="shrink-0 px-5 py-4 border-b border-border-default bg-surface-card flex items-center justify-between gap-4 sticky top-0 z-10">

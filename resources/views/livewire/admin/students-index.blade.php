@@ -63,7 +63,7 @@
                     label="Proficiency Level"
                     wire:model.live="proficiency"
                     placeholder="All Proficiencies"
-                    :options="$proficiencies"
+                    :options="$filterProficiencies"
                 />
             </div>
 
@@ -115,7 +115,7 @@
                     @endif
                     @if ($proficiency !== '')
                         <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-elevated text-text-primary text-[11px] border border-border-default capitalize">
-                            Proficiency: {{ $proficiencies[$proficiency] ?? $proficiency }}
+                            Proficiency: {{ $filterProficiencies[$proficiency] ?? ($proficiencies[$proficiency] ?? $proficiency) }}
                         </span>
                     @endif
                     @if ($courseId !== '')
@@ -321,10 +321,37 @@
 
                 {{-- Proficiency Classification Selector --}}
                 <div class="sm:col-span-2">
-                    <label class="block text-xs font-semibold text-text-primary mb-1.5">
-                        Student Proficiency Classification <span class="text-red-500">*</span>
-                    </label>
-                    <div class="grid grid-cols-3 gap-2">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="block text-xs font-semibold text-text-primary">
+                            Student Proficiency Classification <span class="text-xs text-text-muted font-normal">(Optional)</span>
+                        </label>
+                        @if ($formProficiency !== '' && $formProficiency !== null)
+                            <button
+                                type="button"
+                                wire:click="$set('formProficiency', '')"
+                                class="text-[11px] text-text-muted hover:text-text-primary underline cursor-pointer"
+                            >
+                                Clear to Not Assessed
+                            </button>
+                        @endif
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <label
+                            for="prof-opt-none"
+                            class="p-2.5 rounded-lg border text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-1
+                                {{ empty($formProficiency) ? 'border-primary-500 bg-primary-500/10 ring-2 ring-primary-500/20 font-bold' : 'border-border-default bg-surface-card hover:border-border-hover' }}"
+                        >
+                            <input
+                                id="prof-opt-none"
+                                type="radio"
+                                name="formProficiency"
+                                value=""
+                                wire:model.live="formProficiency"
+                                class="sr-only"
+                            />
+                            <span class="text-xs text-text-primary">Not Assessed</span>
+                            <span class="text-[10px] text-text-muted">Unassessed / Pending</span>
+                        </label>
                         @foreach ($proficiencies as $key => $label)
                             <label
                                 for="prof-opt-{{ $key }}"
@@ -336,12 +363,12 @@
                                     type="radio"
                                     name="formProficiency"
                                     value="{{ $key }}"
-                                    wire:model="formProficiency"
+                                    wire:model.live="formProficiency"
                                     class="sr-only"
                                 />
                                 <span class="text-xs text-text-primary capitalize">{{ $label }}</span>
                                 <span class="text-[10px] text-text-muted">
-                                    {{ $key === 'beginner' ? 'Foundational' : ($key === 'intermediate' ? 'Practitioner' : 'Advanced Specialist') }}
+                                    {{ $key === 'beginner' ? 'Foundational' : ($key === 'intermediate' ? 'Practitioner' : ($key === 'expert' ? 'Advanced Specialist' : 'Custom Classification')) }}
                                 </span>
                             </label>
                         @endforeach

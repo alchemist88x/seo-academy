@@ -3,6 +3,7 @@
 namespace App\Domain\Platform\Services;
 
 use App\Domain\Academies\Models\Academy;
+use App\Domain\Students\Services\ProficiencyLevelService;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Facades\Artisan;
@@ -143,6 +144,9 @@ class DatabaseInstallerService
         'idempotency_records',
         'certificate_audit_events',
 
+        'cms_chat_conversations',
+        'cms_chat_messages',
+
         self::IDENTITY_TABLE,
         self::PROBE_TABLE,
     ];
@@ -235,6 +239,21 @@ class DatabaseInstallerService
         '2026_11_16_150000_add_original_enrollment_id_to_certificates_table',
         '2026_11_16_160000_encrypt_certificate_verification_codes',
         '2026_11_17_100000_add_proficiency_to_student_profiles_table',
+        '2026_11_19_150934_add_soft_deletes_to_students_and_trainers_tables',
+        '2026_11_19_163000_add_pre_deletion_state_to_student_and_trainer_profiles_tables',
+        '2026_11_20_100000_create_practical_projects_tables',
+        '2026_11_20_100001_create_project_submissions_and_evaluations_tables',
+        '2026_11_20_100002_create_student_portfolios_and_achievements_tables',
+        '2026_11_20_110000_make_student_proficiency_and_level_nullable',
+        '2026_11_20_120000_create_proficiency_levels_table',
+        '2026_11_20_130000_create_certificate_designer_tables',
+        '2026_11_20_140000_create_cms_and_marketing_tables',
+        '2026_11_20_150000_create_appearance_banners_and_chatbot_tables',
+        '2026_11_20_160000_enhance_chatbot_phase11_3_tables',
+        '2026_11_21_000000_create_chat_conversations_and_human_inbox_tables',
+        '2026_11_21_020000_enhance_chat_routing_and_handoff_phase12_3',
+        '2026_11_21_030000_enhance_contact_inquiries_phase12_4',
+        '2026_11_21_040000_create_commerce_and_installment_tables_phase12_6',
     ];
 
     public function __construct(
@@ -1426,6 +1445,10 @@ class DatabaseInstallerService
                 );
             }
 
+            app(ProficiencyLevelService::class)->ensureDefaultLevels($academy);
+
+            app(ProficiencyLevelService::class)->ensureDefaultLevels($academy);
+
             return [
                 'academy' => $academy,
                 'admin' => $adminUser,
@@ -1954,13 +1977,26 @@ class DatabaseInstallerService
         $academy->is_active = true;
 
         $settings = is_array($academy->settings) ? $academy->settings : [];
-        $settings['currency'] = $config['currency'] ?? 'USD';
+        $settings['currency'] = $config['currency'] ?? 'INR';
         $settings['date_format'] = $config['date_format'] ?? 'Y-m-d';
         $settings['time_format'] = $config['time_format'] ?? 'H:i';
         $settings['single_tenant'] = true;
         $academy->settings = $settings;
 
         $academy->save();
+
+        Setting::updateOrCreate(
+            [
+                'academy_id' => $academy->id,
+                'group' => 'currency',
+                'key' => 'default_currency',
+            ],
+            [
+                'value' => $settings['currency'],
+                'type' => 'string',
+                'is_public' => true,
+            ]
+        );
 
         return $academy;
     }

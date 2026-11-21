@@ -125,6 +125,26 @@ class CertificatePdfService
      */
     public function renderPdfBinary(Certificate $certificate): string
     {
+        // 1. Check for designer template snapshot or linked designer template
+        $snapshot = $certificate->issuance_snapshot;
+        $designData = is_array($snapshot) ? ($snapshot['template_design'] ?? null) : null;
+
+        if (! $designData && $certificate->certificate_template_version_id) {
+            $designData = $certificate->certificateTemplateVersion?->design_data;
+        }
+
+        if (! $designData && $certificate->certificate_template_id) {
+            $designData = $certificate->certificateTemplate?->getActiveDesignData();
+        }
+
+        if (is_array($designData) && ! empty($designData['elements'])) {
+            $templateService = app(CertificateTemplateService::class);
+            $data = $templateService->resolveDataForCertificate($certificate);
+
+            return $this->renderDesignerPdf($designData, $data, $certificate->course?->academy);
+        }
+
+        // 2. Fall back to standard legacy templates
         $template = $certificate->template ?: 'classic';
         $config = $this->getTemplateConfig($template, $certificate);
 
@@ -134,7 +154,6 @@ class CertificatePdfService
         $academy = $course?->academy;
 
         // Preserve immutable issuance snapshot if present
-        $snapshot = $certificate->issuance_snapshot;
         if (is_array($snapshot)) {
             $studentName = $snapshot['student']['name'] ?? $user?->name ?? 'Student';
             $courseTitle = $snapshot['course']['title'] ?? $course?->title ?? 'Course';
@@ -183,6 +202,55 @@ class CertificatePdfService
         $dompdf->loadHtml($html);
         // Standard landscape US Letter / A4
         $dompdf->setPaper('A4', 'landscape');
+        $dompdf->render();
+
+        return $dompdf->output();
+    }
+
+    /**
+     * Render a custom designer template to PDF binary string.
+     *
+     * @param  array<string, mixed>  $designData
+     * @param  array<string, mixed>  $data
+     */
+    public function renderDesignerPdf(array $designData, array $data, ?Academy $academy = null): string
+    {
+        $canvas = $designData['canvas'] ?? [
+            'width' => 842,
+            'height' => 595,
+            'orientation' => 'landscape',
+            'pageSize' => 'A4',
+            'backgroundColor' => '#ffffff',
+            'fontFamily' => 'Helvetica',
+        ];
+
+        $elements = $designData['elements'] ?? [];
+
+        // If verification QR code data URI is needed and not already set
+        if (empty($data['verification_qr']) && ! empty($data['verification_url'])) {
+            $qrService = app(QrCodeService::class);
+            $data['verification_qr'] = $qrService->generatePngDataUri($data['verification_url'], 160);
+        }
+
+        $html = view('certificates.templates.designer', [
+            'canvas' => $canvas,
+            'elements' => $elements,
+            'data' => $data,
+            'academy' => $academy,
+            'isPdf' => true,
+        ])->render();
+
+        $options = new Options;
+        $options->set('isRemoteEnabled', false);
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('defaultFont', $canvas['fontFamily'] ?? 'Helvetica');
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html);
+
+        $width = (float) ($canvas['width'] ?? 842);
+        $height = (float) ($canvas['height'] ?? 595);
+        $dompdf->setPaper([0, 0, $width, $height]);
         $dompdf->render();
 
         return $dompdf->output();

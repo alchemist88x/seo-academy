@@ -159,7 +159,7 @@
                             </td>
                             <td class="text-sm">
                                 <div class="text-text-primary font-medium">
-                                    {{ $course->is_free ? 'Free' : $course->currency . ' ' . number_format((float) $course->price, 2) }}
+                                    {{ $course->is_free ? 'Free' : format_currency((float) $course->price, $course->currency) }}
                                 </div>
                                 <div class="text-xs text-text-muted">{{ $course->difficulty }}</div>
                             </td>

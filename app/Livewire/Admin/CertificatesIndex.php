@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin;
 
 use App\Domain\Certificates\Models\Certificate;
+use App\Domain\Certificates\Models\CertificateTemplate;
 use App\Domain\Certificates\Services\CertificateIssuanceService;
 use App\Domain\Platform\Models\Setting;
 use App\Domain\Students\Models\Enrollment;
@@ -113,7 +114,7 @@ class CertificatesIndex extends Component
     public function saveSettings(TenantContext $tenantContext): void
     {
         $this->validate([
-            'defaultTemplate' => ['required', 'string', 'in:classic,modern,minimalist'],
+            'defaultTemplate' => ['required', 'string', 'max:255'],
             'signatoryName' => ['required', 'string', 'max:255'],
             'signatoryTitle' => ['required', 'string', 'max:255'],
         ]);
@@ -395,11 +396,15 @@ class CertificatesIndex extends Component
         }
 
         $certificates = $query->latest('issued_at')->paginate(15);
+        $customTemplates = $academy
+            ? CertificateTemplate::where('academy_id', $academy->id)->where('is_archived', false)->get()
+            : collect();
 
         return view('livewire.admin.certificates-index', [
             'certificates' => $certificates,
             'eligibleEnrollments' => $eligibleEnrollments,
             'academy' => $academy,
+            'customTemplates' => $customTemplates,
             'isAdmin' => $user ? ($user->role === 'admin' || $user->hasRole('admin')) : false,
         ]);
     }

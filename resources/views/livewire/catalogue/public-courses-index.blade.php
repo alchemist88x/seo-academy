@@ -3,6 +3,9 @@
 @endphp
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    {{-- Promotional Banner for Courses --}}
+    <x-marketing.banner-carousel placement="courses_promo" />
+
     <x-page-header
         title="Course Catalogue"
         :subtitle="$academy ? 'Explore public courses from ' . $academy->name . '.' : 'Explore published SEO Academy courses.'"
@@ -105,7 +108,7 @@
 
                     <div class="pt-4 mt-4 border-t border-border-default flex items-center justify-between">
                         <span class="text-base font-bold text-text-primary">
-                            {{ $course->is_free ? 'Free' : $course->currency . ' ' . number_format((float) $course->price, 2) }}
+                            {{ $course->is_free ? 'Free' : format_currency((float) $course->price, $course->currency) }}
                         </span>
 
                         <a href="{{ route('courses.public.show', $course->slug) }}" class="btn btn-primary btn-sm">

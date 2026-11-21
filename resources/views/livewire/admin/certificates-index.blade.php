@@ -5,9 +5,15 @@
     >
         @if ($isAdmin)
             <x-slot:actions>
-                <x-button variant="primary" wire:click="openIssueModal">
-                    + Issue Certificate
-                </x-button>
+                <div class="flex items-center space-x-2">
+                    <a href="{{ route('admin.certificates.designer') }}" class="inline-flex items-center px-3.5 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-medium text-text-primary bg-surface-secondary hover:bg-surface-elevated transition shadow-xs">
+                        <svg class="w-4 h-4 mr-2 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                        Certificate Designer
+                    </a>
+                    <x-button variant="primary" wire:click="openIssueModal">
+                        + Issue Certificate
+                    </x-button>
+                </div>
             </x-slot:actions>
         @endif
     </x-page-header>
@@ -25,9 +31,18 @@
             <div>
                 <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Default Template</label>
                 <select wire:model="defaultTemplate" class="w-full text-sm rounded-lg border-border-default bg-surface-primary text-text-primary">
-                    <option value="classic">Classic (Double Border & Gold Accent)</option>
-                    <option value="modern">Modern Minimalist (Clean Indigo & Dark Header)</option>
-                    <option value="minimalist">Clean & Minimal (Emerald Accent)</option>
+                    @if($customTemplates->isNotEmpty())
+                        <optgroup label="Custom Designer Templates">
+                            @foreach($customTemplates as $ct)
+                                <option value="{{ $ct->id }}">{{ $ct->name }} (Designer)</option>
+                            @endforeach
+                        </optgroup>
+                    @endif
+                    <optgroup label="Standard Templates">
+                        <option value="classic">Classic (Double Border & Gold Accent)</option>
+                        <option value="modern">Modern Minimalist (Clean Indigo & Dark Header)</option>
+                        <option value="minimalist">Clean & Minimal (Emerald Accent)</option>
+                    </optgroup>
                 </select>
                 @error('defaultTemplate') <span class="text-xs text-rose-500">{{ $message }}</span> @enderror
             </div>
@@ -511,9 +526,18 @@
                             Certificate Template Design *
                         </label>
                         <select wire:model="issueTemplate" class="w-full text-sm rounded-lg border-border-default bg-surface-primary text-text-primary">
-                            <option value="classic">Classic (Double Border & Gold Accent)</option>
-                            <option value="modern">Modern Minimalist (Clean Indigo & Dark Header)</option>
-                            <option value="minimalist">Clean & Minimal (Emerald Accent)</option>
+                            @if($customTemplates->isNotEmpty())
+                                <optgroup label="Custom Designer Templates">
+                                    @foreach($customTemplates as $ct)
+                                        <option value="{{ $ct->id }}">{{ $ct->name }} (Designer)</option>
+                                    @endforeach
+                                </optgroup>
+                            @endif
+                            <optgroup label="Standard Templates">
+                                <option value="classic">Classic (Double Border & Gold Accent)</option>
+                                <option value="modern">Modern Minimalist (Clean Indigo & Dark Header)</option>
+                                <option value="minimalist">Clean & Minimal (Emerald Accent)</option>
+                            </optgroup>
                         </select>
                         @error('issueTemplate') <span class="text-xs text-rose-500">{{ $message }}</span> @enderror
                     </div>

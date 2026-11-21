@@ -86,6 +86,10 @@ class LearningProgressService
                 }
             }
 
+            $validPosition = ($positionSeconds !== null && is_finite($positionSeconds) && $positionSeconds >= 0)
+                ? (float) $positionSeconds
+                : null;
+
             if ($progress === null) {
                 $progress = LessonProgress::create([
                     'academy_id' => $enrollment->academy_id,
@@ -93,7 +97,7 @@ class LearningProgressService
                     'user_id' => $user->id,
                     'lesson_id' => $lesson->id,
                     'status' => 'in_progress',
-                    'last_position_seconds' => $positionSeconds !== null ? max(0, $positionSeconds) : 0,
+                    'last_position_seconds' => $validPosition ?? 0,
                     'progress_percent' => 0,
                     'last_accessed_at' => $now,
                 ]);
@@ -106,8 +110,8 @@ class LearningProgressService
                     $updates['status'] = 'in_progress';
                 }
 
-                if ($positionSeconds !== null && $positionSeconds >= 0) {
-                    $updates['last_position_seconds'] = $positionSeconds;
+                if ($validPosition !== null) {
+                    $updates['last_position_seconds'] = $validPosition;
                 }
 
                 $progress->update($updates);
@@ -120,7 +124,7 @@ class LearningProgressService
             ]);
 
             return $progress->fresh();
-        });
+        }, 5);
     }
 
     /**
@@ -209,7 +213,7 @@ class LearningProgressService
             $this->completionService->completeCourse($enrollment, $user);
 
             return $savedProgress;
-        });
+        }, 5);
     }
 
     /**
@@ -287,7 +291,7 @@ class LearningProgressService
                     'last_accessed_at' => $now,
                 ]);
             }
-        });
+        }, 5);
     }
 
     /**

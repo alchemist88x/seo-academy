@@ -69,7 +69,7 @@ class InstallationWizard extends Component
 
     public string $locale = 'en';
 
-    public string $currency = 'USD';
+    public string $currency = 'INR';
 
     public string $dateFormat = 'YYYY-MM-DD';
 

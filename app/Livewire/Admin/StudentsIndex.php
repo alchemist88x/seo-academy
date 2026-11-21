@@ -4,7 +4,9 @@ namespace App\Livewire\Admin;
 
 use App\Domain\Academies\Models\Academy;
 use App\Domain\Courses\Models\Course;
+use App\Domain\Students\Models\ProficiencyLevel;
 use App\Domain\Students\Models\StudentProfile;
+use App\Domain\Students\Services\ProficiencyLevelService;
 use App\Domain\Students\Services\StudentManagementService;
 use App\Domain\Tenants\Services\TenantContext;
 use Illuminate\Support\Facades\Auth;
@@ -58,9 +60,9 @@ class StudentsIndex extends Component
 
     public string $batch_input = '';
 
-    public string $formProficiency = StudentProfile::PROFICIENCY_BEGINNER;
+    public string $formProficiency = '';
 
-    public string $formLevel = 'Beginner'; // Legacy alias
+    public string $formLevel = ''; // Legacy alias
 
     public string $enrolled_at = '';
 
@@ -101,7 +103,8 @@ class StudentsIndex extends Component
         $this->authorize('viewAny', StudentProfile::class);
 
         $this->enrolled_at = now()->toDateString();
-        $this->formProficiency = StudentProfile::PROFICIENCY_BEGINNER;
+        $this->formProficiency = '';
+        $this->formLevel = '';
     }
 
     public function updatedName(string $value): void
@@ -123,12 +126,12 @@ class StudentsIndex extends Component
 
     public function updatedFormProficiency(string $value): void
     {
-        $this->formLevel = ucfirst($value);
+        $this->formLevel = $value !== '' ? ucfirst($value) : '';
     }
 
     public function updatedFormLevel(string $value): void
     {
-        $this->formProficiency = StudentProfile::normalizeProficiency($value);
+        $this->formProficiency = StudentProfile::normalizeProficiency($value) ?? '';
     }
 
     public function updatedProficiency(string $value): void
@@ -205,8 +208,8 @@ class StudentsIndex extends Component
         $this->password = '';
         $this->student_code = (string) $profile->student_code;
         $this->batch_input = (string) ($profile->batch ?? '');
-        $this->formProficiency = $profile->proficiency ?: StudentProfile::PROFICIENCY_BEGINNER;
-        $this->formLevel = ucfirst($this->formProficiency);
+        $this->formProficiency = (string) ($profile->proficiency ?? '');
+        $this->formLevel = $profile->proficiency ? ucfirst($profile->proficiency) : '';
         $this->enrolled_at = $profile->enrolled_at?->toDateString() ?? '';
         $this->notes = (string) ($profile->notes ?? '');
         $this->account_status = $profile->active ? 'active' : 'suspended';
@@ -239,7 +242,9 @@ class StudentsIndex extends Component
         $actor = Auth::user();
 
         $fullName = $this->name !== '' ? $this->name : trim("{$this->first_name} {$this->last_name}");
-        $proficiency = StudentProfile::normalizeProficiency($this->formProficiency ?: $this->formLevel);
+        $proficiency = ($this->formProficiency !== '' && $this->formProficiency !== null)
+            ? StudentProfile::normalizeProficiency($this->formProficiency)
+            : (($this->formLevel !== '' && $this->formLevel !== null) ? StudentProfile::normalizeProficiency($this->formLevel) : null);
         $batch = $this->batch_input !== '' ? $this->batch_input : ($this->batch !== '' ? $this->batch : null);
         if ($this->editingStudentId !== null) {
             $profile = StudentProfile::query()
@@ -262,7 +267,7 @@ class StudentsIndex extends Component
                 'student_code' => $this->student_code,
                 'batch' => $batch,
                 'proficiency' => $proficiency,
-                'level' => ucfirst($proficiency),
+                'level' => $proficiency !== null ? ucfirst($proficiency) : null,
                 'enrolled_at' => $this->enrolled_at !== '' ? $this->enrolled_at : null,
                 'notes' => $this->notes !== '' ? $this->notes : null,
                 'status' => $this->account_status,
@@ -282,7 +287,7 @@ class StudentsIndex extends Component
                 'student_code' => $this->student_code !== '' ? $this->student_code : null,
                 'batch' => $batch,
                 'proficiency' => $proficiency,
-                'level' => ucfirst($proficiency),
+                'level' => $proficiency !== null ? ucfirst($proficiency) : null,
                 'enrolled_at' => $this->enrolled_at !== '' ? $this->enrolled_at : null,
                 'notes' => $this->notes !== '' ? $this->notes : null,
                 'status' => $this->account_status,
@@ -546,18 +551,38 @@ class StudentsIndex extends Component
             ->sort()
             ->values();
 
+        $proficiencyService = app(ProficiencyLevelService::class);
+        $activeLevels = $proficiencyService->listForAcademy($academy, activeOnly: true);
+        $proficiencies = $activeLevels->pluck('name', 'slug')->toArray();
+        if (empty($proficiencies)) {
+            $proficiencies = [
+                StudentProfile::PROFICIENCY_BEGINNER => 'Beginner',
+                StudentProfile::PROFICIENCY_INTERMEDIATE => 'Intermediate',
+                StudentProfile::PROFICIENCY_EXPERT => 'Expert',
+            ];
+        }
+        if ($this->editingStudentId && $this->formProficiency && ! isset($proficiencies[$this->formProficiency])) {
+            $inactive = ProficiencyLevel::where('academy_id', $academy->getKey())->where('slug', $this->formProficiency)->first();
+            if ($inactive) {
+                $proficiencies[$this->formProficiency] = "{$inactive->name} (Inactive)";
+            }
+        }
+
+        $allLevels = $proficiencyService->listForAcademy($academy);
+        $filterProficiencies = ['not_assessed' => 'Not Assessed'];
+        foreach ($allLevels as $lvl) {
+            $filterProficiencies[$lvl->slug] = $lvl->is_active ? $lvl->name : "{$lvl->name} (Inactive)";
+        }
+
         return view('livewire.admin.students-index', [
             'academy' => $academy,
             'students' => $students,
             'availableCourses' => $availableCourses,
             'availableBatches' => $availableBatches,
-            'proficiencies' => [
-                StudentProfile::PROFICIENCY_BEGINNER => 'Beginner',
-                StudentProfile::PROFICIENCY_INTERMEDIATE => 'Intermediate',
-                StudentProfile::PROFICIENCY_EXPERT => 'Expert',
-            ],
+            'proficiencies' => $proficiencies,
+            'filterProficiencies' => $filterProficiencies,
             // Kept for backward compatibility
-            'levels' => ['Beginner', 'Intermediate', 'Expert'],
+            'levels' => array_values($proficiencies),
         ]);
     }
 
@@ -583,8 +608,8 @@ class StudentsIndex extends Component
         $this->password = '';
         $this->student_code = '';
         $this->batch_input = '';
-        $this->formProficiency = StudentProfile::PROFICIENCY_BEGINNER;
-        $this->formLevel = 'Beginner';
+        $this->formProficiency = '';
+        $this->formLevel = '';
         $this->enrolled_at = now()->toDateString();
         $this->notes = '';
         $this->account_status = 'active';

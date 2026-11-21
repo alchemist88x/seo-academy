@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Domain\Academies\Models\Academy;
 use App\Domain\Academies\Models\AcademyUser;
+use App\Domain\Commerce\Services\CurrencyAndPricingService;
 use App\Domain\Courses\Models\Course;
 use App\Domain\Courses\Models\CourseCategory;
 use App\Domain\Courses\Services\CourseCategoryService;
@@ -51,7 +52,7 @@ class CoursesIndex extends Component
 
     public string $price = '0.00';
 
-    public string $currency = 'USD';
+    public string $currency = 'INR';
 
     public bool $is_free = true;
 
@@ -197,7 +198,7 @@ class CoursesIndex extends Component
         $this->category_id = (string) ($course->category_id ?? '');
         $this->courseDifficulty = (string) ($course->difficulty ?? 'Beginner');
         $this->price = number_format((float) $course->price, 2, '.', '');
-        $this->currency = (string) ($course->currency ?? 'USD');
+        $this->currency = (string) ($course->currency ?: app(CurrencyAndPricingService::class)->getAcademyCurrency());
         $this->is_free = (bool) $course->is_free;
         $this->duration_months = (string) ($course->duration_months ?? 0);
         $this->enrollment_limit = $course->enrollment_limit !== null ? (string) $course->enrollment_limit : '';
@@ -230,7 +231,7 @@ class CoursesIndex extends Component
             'category_id' => $this->category_id !== '' ? $this->category_id : null,
             'difficulty' => $this->courseDifficulty,
             'price' => $this->is_free ? 0 : ($this->price !== '' ? $this->price : 0),
-            'currency' => $this->currency !== '' ? $this->currency : 'USD',
+            'currency' => $this->currency !== '' ? $this->currency : app(CurrencyAndPricingService::class)->getAcademyCurrency(),
             'is_free' => $this->is_free,
             'duration_months' => $this->duration_months !== '' ? (int) $this->duration_months : 0,
             'enrollment_limit' => $this->enrollment_limit !== '' ? (int) $this->enrollment_limit : null,
@@ -553,7 +554,7 @@ class CoursesIndex extends Component
         $this->category_id = '';
         $this->courseDifficulty = 'Beginner';
         $this->price = '0.00';
-        $this->currency = 'USD';
+        $this->currency = app(CurrencyAndPricingService::class)->getAcademyCurrency();
         $this->is_free = true;
         $this->duration_months = '0';
         $this->enrollment_limit = '';

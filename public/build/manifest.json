@@ -36,7 +36,7 @@
     "src": "_fonts-BxLh4DQe.css"
   },
   "resources/css/app.css": {
-    "file": "assets/app-oP64P9JX.css",
+    "file": "assets/app-_IMMBXUa.css",
     "name": "app",
     "names": [
       "app.css"
@@ -45,7 +45,7 @@
     "isEntry": true
   },
   "resources/js/app.js": {
-    "file": "assets/app-CMN891wD.js",
+    "file": "assets/app-BdIPcgNL.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true

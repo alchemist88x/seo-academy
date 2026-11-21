@@ -6,6 +6,12 @@
         </p>
     </div>
 
+    @if (session('status'))
+        <x-alert type="success" class="mb-5" :dismissible="false">
+            {{ session('status') }}
+        </x-alert>
+    @endif
+
     @if ($errors->any())
         <x-alert type="error" class="mb-5" :dismissible="false">
             {{ $errors->first() }}
@@ -40,6 +46,12 @@
                 label="Remember me"
                 wire:model="remember"
             />
+
+            @if (Route::has('password.request'))
+                <a href="{{ route('password.request') }}" class="text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline">
+                    Forgot password?
+                </a>
+            @endif
         </div>
 
         <div class="pt-2">
@@ -57,4 +69,13 @@
             </x-button>
         </div>
     </form>
+
+    @if (Route::has('register'))
+        <div class="mt-6 text-center text-sm text-text-secondary border-t border-border-default/60 pt-4">
+            Don't have an account?
+            <a href="{{ route('register') }}" class="font-semibold text-primary-600 hover:text-primary-700 hover:underline">
+                Create student account
+            </a>
+        </div>
+    @endif
 </div>

@@ -5,6 +5,8 @@ namespace App\Domain\Students\Models;
 use App\Domain\Academies\Models\Academy;
 use App\Domain\Assessments\Models\AssessmentAttempt;
 use App\Domain\Certificates\Models\Certificate;
+use App\Domain\Commerce\Models\CommerceOrder;
+use App\Domain\Commerce\Models\CourseBundle;
 use App\Domain\Courses\Models\Course;
 use App\Domain\Grading\Models\EnrollmentCurrentGrade;
 use App\Domain\Grading\Models\EnrollmentFinalGrade;
@@ -63,6 +65,9 @@ class Enrollment extends Model
         'student_profile_id',
         'course_id',
         'assigned_by',
+        'order_id',
+        'bundle_id',
+        'payment_status',
         'last_active_lesson_id',
         'last_active_at',
         'enrolled_at',
@@ -128,6 +133,16 @@ class Enrollment extends Model
     public function assignedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_by');
+    }
+
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(CommerceOrder::class, 'order_id');
+    }
+
+    public function bundle(): BelongsTo
+    {
+        return $this->belongsTo(CourseBundle::class, 'bundle_id');
     }
 
     public function lessonProgress(): HasMany

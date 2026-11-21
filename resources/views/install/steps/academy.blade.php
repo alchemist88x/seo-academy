@@ -88,9 +88,9 @@
                     <input
                         type="text"
                         name="currency"
-                        value="{{ old('currency', $state['currency'] ?? 'USD') }}"
+                        value="{{ old('currency', $state['currency'] ?? 'INR') }}"
                         class="input input-sm w-full text-xs font-mono uppercase"
-                        placeholder="USD"
+                        placeholder="INR"
                         maxlength="10"
                     >
                 </div>

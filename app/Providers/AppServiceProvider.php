@@ -34,6 +34,7 @@ use App\Domain\Support\Policies\SupportTicketPolicy;
 use App\Domain\Tenants\Services\TenantContext;
 use App\Domain\Trainers\Models\TrainerProfile;
 use App\Domain\Trainers\Policies\TrainerProfilePolicy;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -44,6 +45,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        require_once app_path('Domain/Commerce/helpers.php');
+
         $this->app->scoped(TenantContext::class);
 
         $this->app->bind(AiProviderInterface::class, function () {
@@ -85,5 +88,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(TrainerProfile::class, TrainerProfilePolicy::class);
         Gate::policy(QuestionBank::class, QuestionBankPolicy::class);
         Gate::policy(Assignment::class, AssignmentPolicy::class);
+
+        Blade::directive('currency', function ($expression) {
+            return "<?php echo app(\\App\\Domain\\Commerce\\Services\\CurrencyAndPricingService::class)->format({$expression}); ?>";
+        });
     }
 }

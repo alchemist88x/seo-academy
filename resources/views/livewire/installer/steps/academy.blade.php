@@ -117,12 +117,13 @@
                     wire:model="currency"
                     class="select select-sm w-full text-xs @error('currency') border-rose-500 @enderror"
                 >
+                    <option value="INR">INR (₹) — Indian Rupee</option>
                     <option value="USD">USD ($) — US Dollar</option>
                     <option value="EUR">EUR (€) — Euro</option>
                     <option value="GBP">GBP (£) — British Pound</option>
+                    <option value="AED">AED (AED) — UAE Dirham</option>
                     <option value="CAD">CAD ($) — Canadian Dollar</option>
                     <option value="AUD">AUD ($) — Australian Dollar</option>
-                    <option value="INR">INR (₹) — Indian Rupee</option>
                     <option value="JPY">JPY (¥) — Japanese Yen</option>
                 </select>
                 @error('currency')

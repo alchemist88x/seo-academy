@@ -5,6 +5,7 @@ namespace App\Domain\Students\Services;
 use App\Domain\Academies\Models\Academy;
 use App\Domain\Academies\Models\AcademyUser;
 use App\Domain\Platform\Concerns\RecordsAuditLog;
+use App\Domain\Students\Models\ProficiencyLevel;
 use App\Domain\Students\Models\StudentProfile;
 use App\Domain\Trainers\Models\TrainerProfile;
 use App\Models\User;
@@ -15,6 +16,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -62,8 +64,14 @@ class StudentManagementService
         // Support both 'proficiency' and legacy 'level'
         $proficiency = trim((string) ($filters['proficiency'] ?? $filters['level'] ?? ''));
         if ($proficiency !== '') {
-            $normalized = StudentProfile::normalizeProficiency($proficiency);
-            $query->forProficiency($normalized);
+            if (in_array(strtolower($proficiency), ['not_assessed', 'unassessed', 'none', 'null', 'not assessed'], true)) {
+                $query->forProficiency(null);
+            } else {
+                $normalized = StudentProfile::normalizeProficiency($proficiency);
+                if ($normalized !== null) {
+                    $query->forProficiency($normalized);
+                }
+            }
         }
 
         // Filter by course enrollment
@@ -101,10 +109,24 @@ class StudentManagementService
         }
 
         // Normalize proficiency from proficiency or level
-        if (! isset($data['proficiency']) && isset($data['level'])) {
-            $data['proficiency'] = StudentProfile::normalizeProficiency($data['level']);
-        } elseif (isset($data['proficiency'])) {
-            $data['proficiency'] = strtolower(trim((string) $data['proficiency']));
+        if (array_key_exists('proficiency', $data)) {
+            $rawProf = $data['proficiency'];
+            $data['proficiency'] = ($rawProf !== null && trim((string) $rawProf) !== '')
+                ? strtolower(trim((string) $rawProf))
+                : null;
+        } elseif (array_key_exists('level', $data)) {
+            $rawLevel = $data['level'];
+            $data['proficiency'] = ($rawLevel !== null && trim((string) $rawLevel) !== '')
+                ? StudentProfile::normalizeProficiency((string) $rawLevel)
+                : null;
+        }
+
+        $activeProficiencies = ProficiencyLevel::where('academy_id', $academy->getKey())
+            ->where('is_active', true)
+            ->pluck('slug')
+            ->toArray();
+        if (empty($activeProficiencies)) {
+            $activeProficiencies = StudentProfile::PROFICIENCIES;
         }
 
         $validated = Validator::make($data, [
@@ -114,7 +136,7 @@ class StudentManagementService
             'password' => ['nullable', 'string', 'min:8'],
             'student_code' => ['nullable', 'string', 'max:100'],
             'batch' => ['nullable', 'string', 'max:255'],
-            'proficiency' => ['nullable', 'string', Rule::in(StudentProfile::PROFICIENCIES)],
+            'proficiency' => ['nullable', 'string', Rule::in($activeProficiencies)],
             'level' => ['nullable', 'string', 'max:100'],
             'enrolled_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:5000'],
@@ -124,7 +146,7 @@ class StudentManagementService
         $email = Str::lower(trim($validated['email']));
         $status = ($validated['status'] ?? 'active') === 'suspended' ? 'suspended' : 'active';
         $isActive = $status === 'active';
-        $proficiency = $validated['proficiency'] ?? StudentProfile::normalizeProficiency($validated['level'] ?? null);
+        $proficiency = $validated['proficiency'] ?? (isset($validated['level']) && trim((string) $validated['level']) !== '' ? StudentProfile::normalizeProficiency($validated['level']) : null);
 
         return DB::transaction(function () use ($academy, $validated, $email, $status, $isActive, $proficiency, $actor): StudentProfile {
             $user = User::where('email', $email)->first();
@@ -200,14 +222,17 @@ class StudentManagementService
                 ]);
             }
 
+            $levelModel = $proficiency ? ProficiencyLevel::where('academy_id', $academy->getKey())->where('slug', $proficiency)->first() : null;
+
             $profile = StudentProfile::create([
                 'user_id' => $user->getKey(),
                 'academy_id' => $academy->getKey(),
+                'proficiency_level_id' => $levelModel?->id,
                 'student_code' => $studentCode,
                 'batch' => $validated['batch'] ?? null,
                 'enrolled_at' => $validated['enrolled_at'] ?? now()->toDateString(),
                 'proficiency' => $proficiency,
-                'level' => ucfirst($proficiency),
+                'level' => $levelModel ? $levelModel->name : ($proficiency !== null ? ucfirst(str_replace('_', ' ', $proficiency)) : null),
                 'active' => $isActive,
                 'notes' => $validated['notes'] ?? null,
             ]);
@@ -230,6 +255,81 @@ class StudentManagementService
         });
     }
 
+    public function registerStudent(Academy $academy, array $data): User
+    {
+        if (! (bool) $academy->setting('allow_self_registration', true)) {
+            throw ValidationException::withMessages([
+                'email' => 'Student self-registration is currently disabled for this academy.',
+            ]);
+        }
+
+        $validated = Validator::make($data, [
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['nullable', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ])->validate();
+
+        $name = trim($validated['first_name'].' '.($validated['last_name'] ?? ''));
+        $email = Str::lower(trim($validated['email']));
+
+        return DB::transaction(function () use ($academy, $name, $email, $validated): User {
+            $user = User::create([
+                'name' => $name,
+                'email' => $email,
+                'password' => $validated['password'],
+                'is_active' => true,
+                'suspended_at' => null,
+            ]);
+
+            Role::firstOrCreate(['name' => 'student', 'guard_name' => 'web']);
+            $user->assignRole('student');
+
+            AcademyUser::create([
+                'academy_id' => $academy->getKey(),
+                'user_id' => $user->getKey(),
+                'role' => 'student',
+                'status' => 'active',
+                'suspended_at' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $profileProficiency = null;
+            if (isset($data['proficiency']) && trim((string) $data['proficiency']) !== '') {
+                $profileProficiency = StudentProfile::normalizeProficiency((string) $data['proficiency']);
+            }
+
+            $studentCode = $this->generateStudentCode($academy);
+            $profile = StudentProfile::create([
+                'user_id' => $user->getKey(),
+                'academy_id' => $academy->getKey(),
+                'student_code' => $studentCode,
+                'batch' => null,
+                'enrolled_at' => now()->toDateString(),
+                'proficiency' => $profileProficiency,
+                'level' => $profileProficiency !== null ? ucfirst($profileProficiency) : null,
+                'active' => true,
+                'notes' => null,
+            ]);
+
+            $this->recordAudit(
+                $academy,
+                $user,
+                'student.self_registered',
+                StudentProfile::class,
+                $profile->getKey(),
+                [
+                    'user_id' => $user->getKey(),
+                    'student_code' => $studentCode,
+                    'email' => $email,
+                ],
+            );
+
+            return $user;
+        });
+    }
+
     public function update(StudentProfile $profile, array $data, User $actor): StudentProfile
     {
         if (empty($data['name']) && (isset($data['first_name']) || isset($data['last_name']))) {
@@ -239,10 +339,27 @@ class StudentManagementService
         }
 
         // Normalize proficiency from proficiency or level
-        if (isset($data['proficiency'])) {
-            $data['proficiency'] = strtolower(trim((string) $data['proficiency']));
-        } elseif (isset($data['level'])) {
-            $data['proficiency'] = StudentProfile::normalizeProficiency($data['level']);
+        if (array_key_exists('proficiency', $data)) {
+            $rawProf = $data['proficiency'];
+            $data['proficiency'] = ($rawProf !== null && trim((string) $rawProf) !== '')
+                ? strtolower(trim((string) $rawProf))
+                : null;
+        } elseif (array_key_exists('level', $data)) {
+            $rawLevel = $data['level'];
+            $data['proficiency'] = ($rawLevel !== null && trim((string) $rawLevel) !== '')
+                ? StudentProfile::normalizeProficiency((string) $rawLevel)
+                : null;
+        }
+
+        $activeProficiencies = ProficiencyLevel::where('academy_id', $profile->academy_id)
+            ->where('is_active', true)
+            ->pluck('slug')
+            ->toArray();
+        if (empty($activeProficiencies)) {
+            $activeProficiencies = StudentProfile::PROFICIENCIES;
+        }
+        if ($profile->proficiency && ! in_array($profile->proficiency, $activeProficiencies, true)) {
+            $activeProficiencies[] = $profile->proficiency;
         }
 
         $validated = Validator::make($data, [
@@ -259,8 +376,8 @@ class StudentManagementService
             'password' => ['nullable', 'string', 'min:8'],
             'student_code' => ['sometimes', 'required', 'string', 'max:100'],
             'batch' => ['nullable', 'string', 'max:255'],
-            'proficiency' => ['sometimes', 'required', 'string', Rule::in(StudentProfile::PROFICIENCIES)],
-            'level' => ['sometimes', 'required', 'string', 'max:100'],
+            'proficiency' => ['sometimes', 'nullable', 'string', Rule::in($activeProficiencies)],
+            'level' => ['sometimes', 'nullable', 'string', 'max:100'],
             'enrolled_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:5000'],
             'status' => ['sometimes', 'string', 'in:active,suspended,inactive'],
@@ -324,8 +441,21 @@ class StudentManagementService
                 array_flip(['student_code', 'batch', 'proficiency', 'level', 'enrolled_at', 'notes']),
             );
 
-            if (isset($profileUpdates['proficiency'])) {
-                $profileUpdates['level'] = ucfirst($profileUpdates['proficiency']);
+            if (array_key_exists('proficiency', $validated)) {
+                $levelModel = $validated['proficiency']
+                    ? ProficiencyLevel::where('academy_id', $profile->academy_id)->where('slug', $validated['proficiency'])->first()
+                    : null;
+                $profileUpdates['proficiency_level_id'] = $levelModel?->id;
+                $profileUpdates['proficiency'] = $validated['proficiency'];
+                $profileUpdates['level'] = $levelModel ? $levelModel->name : ($validated['proficiency'] !== null ? ucfirst(str_replace('_', ' ', $validated['proficiency'])) : null);
+            } elseif (array_key_exists('level', $validated)) {
+                $norm = StudentProfile::normalizeProficiency($validated['level'], $profile->academy_id);
+                $levelModel = $norm
+                    ? ProficiencyLevel::where('academy_id', $profile->academy_id)->where('slug', $norm)->first()
+                    : null;
+                $profileUpdates['proficiency_level_id'] = $levelModel?->id;
+                $profileUpdates['proficiency'] = $norm;
+                $profileUpdates['level'] = $levelModel ? $levelModel->name : ($norm !== null ? ucfirst(str_replace('_', ' ', $norm)) : null);
             }
 
             if (array_key_exists('notes', $data) && ! isset($profileUpdates['notes'])) {
@@ -350,6 +480,58 @@ class StudentManagementService
 
             return $profile->fresh(['user', 'academy']);
         });
+    }
+
+    public function updateProficiency(StudentProfile $profile, ?string $proficiency, User $actor): StudentProfile
+    {
+        $normalized = StudentProfile::normalizeProficiency($proficiency, $profile->academy_id);
+
+        if ($proficiency !== null && trim((string) $proficiency) !== '') {
+            $allowed = ProficiencyLevel::where('academy_id', $profile->academy_id)
+                ->where('is_active', true)
+                ->pluck('slug')
+                ->toArray();
+            if (empty($allowed)) {
+                $allowed = StudentProfile::PROFICIENCIES;
+            }
+            if ($profile->proficiency && ! in_array($profile->proficiency, $allowed, true)) {
+                $allowed[] = $profile->proficiency;
+            }
+
+            if ($normalized === null || ! in_array($normalized, $allowed, true)) {
+                throw ValidationException::withMessages([
+                    'proficiency' => 'The selected proficiency is invalid or inactive.',
+                ]);
+            }
+        }
+
+        if (! Gate::forUser($actor)->allows('updateProficiency', $profile)) {
+            throw new AuthorizationException('You are not authorized to update this student proficiency.');
+        }
+
+        $levelModel = $normalized
+            ? ProficiencyLevel::where('academy_id', $profile->academy_id)->where('slug', $normalized)->first()
+            : null;
+
+        $profile->update([
+            'proficiency_level_id' => $levelModel?->id,
+            'proficiency' => $normalized,
+            'level' => $levelModel ? $levelModel->name : ($normalized !== null ? ucfirst(str_replace('_', ' ', $normalized)) : null),
+        ]);
+
+        $this->recordAudit(
+            $profile->academy,
+            $actor,
+            'student.proficiency_updated',
+            StudentProfile::class,
+            $profile->getKey(),
+            [
+                'proficiency' => $normalized,
+                'proficiency_level_id' => $levelModel?->id,
+            ],
+        );
+
+        return $profile->fresh(['user', 'academy', 'proficiencyLevel']);
     }
 
     public function toggleActive(StudentProfile $profile, ?User $actor = null): StudentProfile
@@ -754,6 +936,8 @@ class StudentManagementService
             ->flip()
             ->all();
 
+        $activeLevels = ProficiencyLevel::where('academy_id', $academy->getKey())->where('is_active', true)->get();
+
         $seenEmails = [];
         $seenCodes = [];
         $validRows = [];
@@ -781,7 +965,12 @@ class StudentManagementService
 
             if ($rawProficiency !== '') {
                 $cleanProficiency = strtolower($rawProficiency);
-                if (in_array($cleanProficiency, StudentProfile::PROFICIENCIES, true)) {
+                $match = $activeLevels->first(fn ($lvl) => strtolower($lvl->slug) === $cleanProficiency || strtolower($lvl->name) === $cleanProficiency);
+                if (in_array($cleanProficiency, ['not assessed', 'not_assessed', 'none', 'null', 'unassessed', '—', '-'], true)) {
+                    $normalizedProficiency = null;
+                } elseif ($match) {
+                    $normalizedProficiency = $match->slug;
+                } elseif (in_array($cleanProficiency, StudentProfile::PROFICIENCIES, true)) {
                     $normalizedProficiency = $cleanProficiency;
                 } elseif (str_contains($cleanProficiency, 'inter')) {
                     $normalizedProficiency = StudentProfile::PROFICIENCY_INTERMEDIATE;
@@ -793,10 +982,10 @@ class StudentManagementService
                     $invalidProficiency = true;
                 }
             } else {
-                $normalizedProficiency = StudentProfile::PROFICIENCY_BEGINNER;
+                $normalizedProficiency = null;
             }
 
-            $assoc['proficiency'] = $normalizedProficiency ?? $rawProficiency;
+            $assoc['proficiency'] = $normalizedProficiency ?? ($invalidProficiency ? $rawProficiency : null);
 
             $validator = Validator::make($assoc, [
                 'name' => ['required', 'string', 'max:255'],
@@ -855,8 +1044,8 @@ class StudentManagementService
                     'phone' => ($assoc['phone'] ?? '') !== '' ? $assoc['phone'] : null,
                     'student_code' => $code !== '' ? $code : null,
                     'batch' => ($assoc['batch'] ?? '') !== '' ? $assoc['batch'] : null,
-                    'proficiency' => $normalizedProficiency ?: StudentProfile::PROFICIENCY_BEGINNER,
-                    'level' => ucfirst($normalizedProficiency ?: StudentProfile::PROFICIENCY_BEGINNER),
+                    'proficiency' => $normalizedProficiency,
+                    'level' => $normalizedProficiency ? ucfirst($normalizedProficiency) : null,
                     'enrolled_at' => ($assoc['enrolled_at'] ?? '') !== '' ? $assoc['enrolled_at'] : null,
                     'notes' => ($assoc['notes'] ?? '') !== '' ? $assoc['notes'] : null,
                 ],
@@ -974,8 +1163,14 @@ class StudentManagementService
 
         $proficiency = trim((string) ($filters['proficiency'] ?? $filters['level'] ?? ''));
         if ($proficiency !== '') {
-            $normalized = StudentProfile::normalizeProficiency($proficiency);
-            $query->forProficiency($normalized);
+            if (in_array(strtolower($proficiency), ['not_assessed', 'unassessed', 'none', 'null', 'not assessed'], true)) {
+                $query->forProficiency(null);
+            } else {
+                $normalized = StudentProfile::normalizeProficiency($proficiency);
+                if ($normalized !== null) {
+                    $query->forProficiency($normalized);
+                }
+            }
         }
 
         $courseId = trim((string) ($filters['course_id'] ?? ''));

@@ -42,6 +42,8 @@ class Certificate extends Model
         'encrypted_verification_code',
         'verification_token_hash',
         'template',
+        'certificate_template_id',
+        'certificate_template_version_id',
         'issuance_snapshot',
         'pdf_path',
         'pdf_generation_status',
@@ -135,6 +137,16 @@ class Certificate extends Model
     public function course(): BelongsTo
     {
         return $this->belongsTo(Course::class);
+    }
+
+    public function certificateTemplate(): BelongsTo
+    {
+        return $this->belongsTo(CertificateTemplate::class, 'certificate_template_id');
+    }
+
+    public function certificateTemplateVersion(): BelongsTo
+    {
+        return $this->belongsTo(CertificateTemplateVersion::class, 'certificate_template_version_id');
     }
 
     protected static function booted(): void

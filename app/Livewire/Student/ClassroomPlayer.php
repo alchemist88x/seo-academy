@@ -4,6 +4,7 @@ namespace App\Livewire\Student;
 
 use App\Domain\Certificates\Services\CertificateIssuanceService;
 use App\Domain\Courses\Models\Course;
+use App\Domain\Learning\Models\LessonProgress;
 use App\Domain\Learning\Services\CourseNavigationService;
 use App\Domain\Learning\Services\LearningProgressService;
 use App\Domain\Lessons\Models\Lesson;
@@ -15,7 +16,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-#[Layout('layouts.app')]
+#[Layout('layouts.classroom')]
 #[Title('Course Classroom')]
 class ClassroomPlayer extends Component
 {
@@ -30,6 +31,10 @@ class ClassroomPlayer extends Component
     public ?string $certificateNumber = null;
 
     public bool $isLessonCompleted = false;
+
+    public float $lastPositionSeconds = 0.0;
+
+    public string $activeTab = 'overview';
 
     public array $navigation = [
         'previous' => null,
@@ -59,7 +64,7 @@ class ClassroomPlayer extends Component
             abort(403, 'User account is inactive or unauthenticated.');
         }
 
-        $academy = $tenantContext->getAcademy();
+        $academy = $tenantContext->getAcademy() ?? $course->academy ?? Academy::current();
         if ($academy === null || (string) $course->academy_id !== (string) $academy->getKey()) {
             abort(404, 'Course not found in the active academy.');
         }
@@ -82,6 +87,12 @@ class ClassroomPlayer extends Component
             if ($this->enrollment) {
                 $progressService->updateResumeLocation($this->enrollment, $this->currentLesson, $user);
                 $this->isLessonCompleted = $progressService->isLessonCompleted($this->enrollment, $this->currentLesson);
+
+                $progress = LessonProgress::query()
+                    ->where('enrollment_id', $this->enrollment->id)
+                    ->where('lesson_id', $this->currentLesson->id)
+                    ->first();
+                $this->lastPositionSeconds = $progress ? (float) $progress->last_position_seconds : 0.0;
             }
         }
 
@@ -131,6 +142,13 @@ class ClassroomPlayer extends Component
     public function toggleMobileCurriculum(): void
     {
         $this->mobileCurriculumOpen = ! $this->mobileCurriculumOpen;
+    }
+
+    public function setActiveTab(string $tab): void
+    {
+        if (in_array($tab, ['overview', 'materials', 'notes'], true)) {
+            $this->activeTab = $tab;
+        }
     }
 
     public function render()

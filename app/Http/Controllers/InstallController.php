@@ -455,7 +455,7 @@ class InstallController extends Controller
                 'support_email' => $validated['support_email'],
                 'timezone' => $validated['timezone'] ?? 'UTC',
                 'locale' => $validated['locale'] ?? 'en',
-                'currency' => $validated['currency'] ?? 'USD',
+                'currency' => $validated['currency'] ?? 'INR',
                 'date_format' => $validated['date_format'] ?? 'Y-m-d',
                 'time_format' => $validated['time_format'] ?? 'H:i',
             ]);
